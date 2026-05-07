@@ -536,7 +536,12 @@ function _nav(id){
   renderPage(id);
 }
 function back(){
-  if(STACK.length<=1)return;
+  if(STACK.length<=1){
+    // Sem histórico — volta para home do cliente ou admin
+    if(ADMIN_MODE) adminTabGo('home');
+    else tabGo('home');
+    return;
+  }
   const cur=STACK.pop();
   const prev=STACK[STACK.length-1];
   // Mostra anterior ANTES de animar a saída — evita tela preta
@@ -561,14 +566,17 @@ function tabGo(tab){
   const id=map[tab];if(!id)return;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   el('tb-'+tab)?.classList.add('on');
-  STACK=[id];showPage(id);renderPage(id);
+  // Tab pages sempre começam com stack limpo — back() volta ao home
+  STACK=tab==='home'?['pg-home']:['pg-home',id];
+  showPage(id);renderPage(id);
 }
 function adminTabGo(tab){
   const map={home:'pg-admin',apts:'pg-adm-apts',svcs:'pg-adm-svcs'};
   const id=map[tab];if(!id)return;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   el('adm-tb-'+tab)?.classList.add('on');
-  STACK=[id];showPage(id);renderPage(id);
+  STACK=tab==='home'?['pg-admin']:['pg-admin',id];
+  showPage(id);renderPage(id);
 }
 function renderPage(id){
   ({
