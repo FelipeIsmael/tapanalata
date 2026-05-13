@@ -234,6 +234,7 @@ input,select,textarea,button{font-family:inherit}
 <!-- LOADING -->
 <div class="page" id="pg-loading">
   <div class="loading-logo">TAPA <span>NA</span> LATA</div>
+  <div id="loading-status" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px"></div>
   <div class="spin"></div>
 </div>
 
@@ -643,20 +644,34 @@ async function doAdminLogin(){
   await loadUserProfile(data.user);
 }
 async function loadUserProfile(authUser){
-  const{data:p,error}=await supa.from('profiles').select('*').eq('id',authUser.id).single();
-  if(error||!p){toast('Erro ao carregar perfil','err');await supa.auth.signOut();return;}
-  CU={id:p.id,name:p.name,email:authUser.email,role:p.role,phone:p.phone};
-  ADMIN_MODE=(p.role==='admin');
-  await refreshCache();
-  if(ADMIN_MODE){initAdminUI();subscribeRealtime();}else{initClientUI();subscribeClientRealtime();}
+  try{
+    setLoadingStatus('Carregando perfil…');
+    const{data:p,error}=await supa.from('profiles').select('*').eq('id',authUser.id).single();
+    if(error||!p){toast('Erro ao carregar perfil','err');await supa.auth.signOut();showPage('pg-auth');authTab('login');return;}
+    CU={id:p.id,name:p.name,email:authUser.email,role:p.role,phone:p.phone};
+    ADMIN_MODE=(p.role==='admin');
+    setLoadingStatus('Sincronizando dados…');
+    await refreshCache();
+    if(ADMIN_MODE){initAdminUI();subscribeRealtime();}else{initClientUI();subscribeClientRealtime();}
+  }catch(e){
+    console.error('loadUserProfile error:',e);
+    toast('Erro ao carregar perfil. Tente novamente.','err',4000);
+    await supa.auth.signOut();
+    showPage('pg-auth');authTab('login');
+  }
 }
 async function refreshCache(){
-  const[{data:s},{data:a},{data:b}]=await Promise.all([
-    supa.from('services').select('*').order('sort_order'),
-    supa.from('addons').select('*').order('sort_order'),
-    supa.from('blocked_slots').select('*').order('date'),
-  ]);
-  SVC_CACHE=s||[];ADN_CACHE=a||[];BLOCKED=b||[];
+  try{
+    const[{data:s},{data:a},{data:b}]=await Promise.all([
+      supa.from('services').select('*').order('sort_order'),
+      supa.from('addons').select('*').order('sort_order'),
+      supa.from('blocked_slots').select('*').order('date'),
+    ]);
+    SVC_CACHE=s||[];ADN_CACHE=a||[];BLOCKED=b||[];
+  }catch(e){
+    console.error('refreshCache error:',e);
+    SVC_CACHE=[];ADN_CACHE=[];BLOCKED=[];
+  }
 }
 async function logout(){
   RT_CHANNEL&&supa.removeChannel(RT_CHANNEL);
@@ -1138,6 +1153,7 @@ function checkIOSHint(){
 }
 
 // ── INIT ──
+function setLoadingStatus(msg){const e=document.getElementById('loading-status');if(e)e.textContent=msg;}
 async function init(){
   showPage('pg-loading');
   // Safety timeout: if loading takes more than 8s, go to login
@@ -1156,6 +1172,7 @@ async function init(){
   }
   if(window.location.hash.includes('type=recovery')){showPage('pg-auth');authTab('login');toast('Defina sua nova senha','ok',4000);return;}
   try{
+    setLoadingStatus('Verificando sessão…');
     const{data:{session}}=await supa.auth.getSession();
     clearTimeout(_loadTimeout);
     if(session?.user){await loadUserProfile(session.user);return;}
