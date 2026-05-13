@@ -1140,6 +1140,8 @@ function checkIOSHint(){
 // ── INIT ──
 async function init(){
   showPage('pg-loading');
+  // Safety timeout: if loading takes more than 8s, go to login
+  const _loadTimeout=setTimeout(()=>{if(document.getElementById('pg-loading')&&!document.getElementById('pg-loading').classList.contains('gone')){showPage('pg-auth');authTab('login');toast('Tempo de conexão esgotado. Tente novamente.','err',4000);}},8000);
   if(SUPABASE_URL.includes('SEU-PROJETO')){
     el('pg-loading').innerHTML=`<div style="padding:32px;text-align:center;max-width:360px">
       <div style="font-size:40px;margin-bottom:16px">⚙️</div>
@@ -1153,9 +1155,15 @@ async function init(){
     return;
   }
   if(window.location.hash.includes('type=recovery')){showPage('pg-auth');authTab('login');toast('Defina sua nova senha','ok',4000);return;}
-  const{data:{session}}=await supa.auth.getSession();
-  if(session?.user){await loadUserProfile(session.user);return;}
-  showPage('pg-auth');authTab('login');
+  try{
+    const{data:{session}}=await supa.auth.getSession();
+    clearTimeout(_loadTimeout);
+    if(session?.user){await loadUserProfile(session.user);return;}
+    showPage('pg-auth');authTab('login');
+  }catch(e){
+    console.error('Init error:',e);
+    showPage('pg-auth');authTab('login');
+  }
 }
 init();
 
