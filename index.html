@@ -651,6 +651,8 @@ async function loadUserProfile(authUser){
     CU={id:p.id,name:p.name,email:authUser.email,role:p.role,phone:p.phone};
     ADMIN_MODE=(p.role==='admin');
     setLoadingStatus('Sincronizando dados…');
+    // Pequeno delay para garantir que o SDK propagou o token antes das queries RLS
+    await new Promise(r=>setTimeout(r,300));
     await refreshCache();
     if(ADMIN_MODE){initAdminUI();subscribeRealtime();}else{initClientUI();subscribeClientRealtime();}
   }catch(e){
@@ -662,10 +664,17 @@ async function loadUserProfile(authUser){
 }
 async function refreshCache(){
   try{
-    const[{data:s},{data:a},{data:b}]=await Promise.all([
-      supa.from('services').select('*').order('sort_order'),
-      supa.from('addons').select('*').order('sort_order'),
-      supa.from('blocked_slots').select('*').order('date'),
+    // Garante que a sessão está ativa antes de buscar dados protegidos por RLS
+    const{data:{session}}=await supa.auth.getSession();
+    if(!session){console.warn('refreshCache: sem sessão ativa');SVC_CACHE=[];ADN_CACHE=[];BLOCKED=[];return;}
+    const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms));
+    const[{data:s},{data:a},{data:b}]=await Promise.race([
+      Promise.all([
+        supa.from('services').select('*').order('sort_order'),
+        supa.from('addons').select('*').order('sort_order'),
+        supa.from('blocked_slots').select('*').order('date'),
+      ]),
+      timeout(10000).then(()=>{throw new Error('refreshCache timeout')})
     ]);
     SVC_CACHE=s||[];ADN_CACHE=a||[];BLOCKED=b||[];
   }catch(e){
