@@ -22,25 +22,7 @@
   --green:#22c55e;--yellow:#f59e0b;
   --indigo:#818cf8;--indigo-l:#a5b4fc;--indigo-bg:rgba(129,140,248,.08);
   --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
-  --hdr-bg:rgba(10,10,10,.95);
-  --tabbar-bg:rgba(12,12,12,.97);
-  --toast-shadow:rgba(0,0,0,.5);
 }
-[data-theme="light"]{
-  --bg:#f0f0f0;--bg2:#e8e8e8;--bg3:#e2e2e2;
-  --card:#ffffff;--card2:#f5f5f5;
-  --border:#d0d0d0;--border-r:rgba(229,29,29,.3);
-  --text:#111111;--muted:#666666;--muted2:#999999;
-  --indigo:#6366f1;--indigo-l:#4f46e5;--indigo-bg:rgba(99,102,241,.08);
-  --hdr-bg:rgba(240,240,240,.95);
-  --tabbar-bg:rgba(240,240,240,.97);
-  --toast-shadow:rgba(0,0,0,.15);
-}
-/* Theme toggle button */
-.theme-toggle{background:none;border:none;font-size:20px;padding:2px 4px;cursor:pointer;opacity:.85;color:#fff;line-height:1}
-[data-theme="light"] .theme-toggle{color:var(--text);opacity:.75}
-[data-theme="light"] .hdr:not(.red) .theme-toggle{color:var(--text)}
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);overscroll-behavior:none}
 input,select,textarea,button{font-family:inherit}
@@ -57,7 +39,7 @@ input,select,textarea,button{font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-logo{font-family:'Bebas Neue',cursive;font-size:32px;letter-spacing:3px}
 .loading-logo span{color:var(--red)}
-.hdr{padding-top:calc(var(--safe-t) + 12px);padding-bottom:12px;padding-left:16px;padding-right:16px;background:var(--hdr-bg);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:10px;flex-shrink:0;z-index:5}
+.hdr{padding-top:calc(var(--safe-t) + 12px);padding-bottom:12px;padding-left:16px;padding-right:16px;background:rgba(10,10,10,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:10px;flex-shrink:0;z-index:5}
 .hdr.red{background:var(--red);border-bottom:none}
 .hdr-back{background:none;border:none;color:#fff;font-size:26px;line-height:1;padding:0 4px 0 0;cursor:pointer;opacity:.9}
 .hdr-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px;text-transform:uppercase;flex:1;color:#fff}
@@ -65,7 +47,7 @@ input,select,textarea,button{font-family:inherit}
 .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 .scroll::-webkit-scrollbar{display:none}
 .pad{padding:0 16px;padding-bottom:calc(var(--safe-b) + 80px)}
-#tabbar{flex-shrink:0;background:var(--tabbar-bg);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:flex-start;padding-top:8px;padding-bottom:calc(var(--safe-b) + 4px);z-index:5}
+#tabbar{flex-shrink:0;background:rgba(12,12,12,.97);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:flex-start;padding-top:8px;padding-bottom:calc(var(--safe-b) + 4px);z-index:5}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 0;transition:color .15s;position:relative}
 .tab.on{color:var(--red)}
 .tab-ic{font-size:22px;line-height:1;position:relative}
@@ -204,7 +186,7 @@ input,select,textarea,button{font-family:inherit}
 .notif-body .nd{font-size:11px;color:var(--muted2);margin-top:3px}
 .ndot{width:8px;height:8px;background:var(--red);border-radius:50%;flex-shrink:0;margin-top:6px}
 .rt-dot{width:7px;height:7px;background:var(--green);border-radius:50%;display:inline-block;animation:blink 1.5s ease infinite;margin-right:5px;vertical-align:middle}
-.sheet-ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:flex;align-items:flex-end}
+.sheet-ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);display:flex;align-items:flex-end}
 .sheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-height:88dvh;display:flex;flex-direction:column;animation:sheetUp .28s cubic-bezier(.4,0,.2,1)}
 @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0}
@@ -214,7 +196,7 @@ input,select,textarea,button{font-family:inherit}
 .sheet-scroll::-webkit-scrollbar{display:none}
 .sheet-footer{padding:12px 20px;padding-bottom:calc(var(--safe-b) + 12px);border-top:1px solid var(--border);display:flex;gap:10px}
 #toast-wrap{position:fixed;bottom:calc(var(--safe-b) + 70px);left:12px;right:12px;z-index:9999;pointer-events:none;display:flex;flex-direction:column;gap:8px}
-.toast-item{background:var(--card2);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;box-shadow:0 8px 28px var(--toast-shadow);border:1px solid var(--border);animation:toastUp .3s ease}
+.toast-item{background:var(--card2);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;box-shadow:0 8px 28px rgba(0,0,0,.5);border:1px solid var(--border);animation:toastUp .3s ease}
 .toast-item.ok{border-color:rgba(34,197,94,.35)}.toast-item.err{border-color:rgba(229,29,29,.35)}
 @keyframes toastUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .confirm-ov{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:24px}
@@ -230,7 +212,7 @@ input,select,textarea,button{font-family:inherit}
 .empty-ic{font-size:52px;opacity:.35}
 .empty-t{font-size:18px;font-weight:700;color:var(--muted)}
 .empty-s{font-size:13px;color:var(--muted2);max-width:220px;line-height:1.5}
-#install-banner{position:fixed;bottom:calc(var(--safe-b) + 66px);left:10px;right:10px;z-index:400;background:var(--card2);border:1px solid var(--border-r);border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px var(--toast-shadow);animation:toastUp .4s ease}
+#install-banner{position:fixed;bottom:calc(var(--safe-b) + 66px);left:10px;right:10px;z-index:400;background:var(--card2);border:1px solid var(--border-r);border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);animation:toastUp .4s ease}
 .ib-logo{width:46px;height:46px;border-radius:12px;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:16px;color:#fff;letter-spacing:1px;flex-shrink:0}
 .ib-txt{flex:1}.ib-txt strong{display:block;font-size:14px;font-weight:700;margin-bottom:1px}
 .ib-txt span{font-size:11px;color:var(--muted)}
@@ -242,29 +224,6 @@ input,select,textarea,button{font-family:inherit}
 .blocked-item{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
 .blocked-item:last-child{border:none}
 @media(max-width:360px){.hero-title{font-size:26px}.qa-lb{font-size:10px}}
-
-/* Light mode extra overrides */
-[data-theme="light"] .page{background:var(--bg)}
-[data-theme="light"] .fld input,
-[data-theme="light"] .fld select,
-[data-theme="light"] .fld textarea{color:var(--text);background:var(--bg3);border-color:var(--border)}
-[data-theme="light"] .fld select option{background:var(--bg3);color:var(--text)}
-[data-theme="light"] .search-bar input{color:var(--text)}
-[data-theme="light"] .ninp{color:var(--text)}
-[data-theme="light"] .ninp.t{color:var(--indigo)}
-[data-theme="light"] .ninp.p{color:var(--red)}
-[data-theme="light"] .hdr:not(.red){background:var(--hdr-bg);color:var(--text)}
-[data-theme="light"] .hdr:not(.red) .hdr-back,
-[data-theme="light"] .hdr:not(.red) .hdr-title,
-[data-theme="light"] .hdr:not(.red) .hdr-act{color:var(--text)}
-[data-theme="light"] .apt-db{background:var(--bg3)}
-[data-theme="light"] #pg-loading{background:var(--bg)}
-[data-theme="light"] .loading-logo{color:var(--text)}
-[data-theme="light"] .spin{border-color:var(--border);border-top-color:var(--red)}
-[data-theme="light"] .btn-o{color:var(--text);border-color:var(--border)}
-[data-theme="light"] .auth-card{background:var(--card);border-color:var(--border)}
-
-
 
 </style>
 </head>
@@ -329,7 +288,6 @@ input,select,textarea,button{font-family:inherit}
 <div class="page gone" id="pg-home">
   <div class="hdr red">
     <div style="flex:1;font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:2px">TAPA NA LATA</div>
-    <button class="theme-toggle" onclick="toggleTheme()" id="home-theme-btn" title="Alternar tema">🌙</button>
     <button class="hdr-act" id="hdr-notif-btn" onclick="nav('pg-notifs')">&#128276;</button>
     <div id="hdr-av" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;cursor:pointer" onclick="nav('pg-profile')"></div>
   </div>
@@ -342,11 +300,10 @@ input,select,textarea,button{font-family:inherit}
     </div>
     <div id="active-job"></div>
     <div class="sh" style="padding-left:16px;padding-right:16px">Acesso Rápido</div>
-    <div class="qa" style="grid-template-columns:repeat(4,1fr)">
+    <div class="qa">
       <div class="qa-item" onclick="tabGo('apts')"><div class="qa-ic">&#128197;</div><div class="qa-lb">Meus<span>Agendamentos</span></div></div>
       <div class="qa-item" onclick="tabGo('svcs')"><div class="qa-ic">&#128295;</div><div class="qa-lb">Nossos<span>Serviços</span></div></div>
       <div class="qa-item" onclick="nav('pg-new')"><div class="qa-ic">&#9889;</div><div class="qa-lb">Novo<span>Agendamento</span></div></div>
-      <div class="qa-item" onclick="window.open('https://www.google.com/maps?q=Tapa+na+Lata+-+Alameda+Dr.+Jos%C3%A9+Cardeal,+241+-+Jardim+Pedroso,+Indaiatuba+-+SP,+13343-100&ftid=0x94cf4b44af301257:0xf699a92a1fefd308&entry=gps&shh=CAE&lucs=,94297699,94284454,94231188,94280568,47071704,100809209,94218641,94282134,94286869&g_ep=CAISEjI2LjE4LjAuOTA2NTA0NDMzMBgAIIgnKlIsOTQyOTc2OTksOTQyODQ0NTQsOTQyMzExODgsOTQyODA1NjgsNDcwNzE3MDQsMTAwODA5MjA5LDk0MjE4NjQxLDk0MjgyMTM0LDk0Mjg2ODY5QgJCUg%3D%3D&skid=fe7c161b-bdfe-4c8e-b14c-ee4ec5cc06c3&g_st=iw','_blank')"><div class="qa-ic">⭐</div><div class="qa-lb">Nos<span>Avalie</span></div></div>
     </div>
     <div class="sh" style="padding-left:16px;padding-right:16px">Recentes <a onclick="tabGo('apts')">Ver todos</a></div>
     <div id="home-recent" style="padding:0 16px 16px"></div>
@@ -443,7 +400,6 @@ input,select,textarea,button{font-family:inherit}
   <div class="hdr red">
     <div style="flex:1;font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px">&#128295; Painel Admin</div>
     <span class="rt-dot" id="rt-dot" title="Realtime"></span>
-    <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">🌙</button>
     <button class="hdr-act" onclick="logout()">Sair</button>
   </div>
   <div class="scroll">
@@ -842,7 +798,9 @@ async function updateAptStatus(id,status){
   if(error){toast('Erro ao atualizar','err');return;}
   toast(`Status: ${status}`);
   await supa.from('notifications').insert({user_id:data.user_id,type:'status',title:`Status: ${status}`,body:`${(data.service_names||[]).join(', ')} — ${fmtDate(data.date)} às ${data.time}h`});
-  renderAdmApts();renderAdmin();openAptDet(data);
+  await Promise.all([renderAdmApts(),renderAdmin()]);
+  const fresh=ALL_APTS.find(a=>a.id===id)||data;
+  openAptDet(fresh);
 }
 
 // ── CLIENT APTS ──
@@ -1178,24 +1136,6 @@ function checkIOSHint(){
     setTimeout(()=>{toast('📱 Safari → Compartilhar → "Adicionar à Tela de Início"','ok',6000);localStorage.setItem('tnl_ios','1');},5000);
   }
 }
-
-// ── THEME ──
-function applyTheme(theme){
-  document.documentElement.setAttribute('data-theme',theme);
-  localStorage.setItem('tnl_theme',theme);
-  const isDark=theme==='dark';
-  const icon=isDark?'🌙':'☀️';
-  document.querySelectorAll('.theme-toggle').forEach(b=>b.textContent=icon);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content',isDark?'#e51d1d':'#e51d1d');
-}
-function toggleTheme(){
-  const cur=document.documentElement.getAttribute('data-theme')||'dark';
-  applyTheme(cur==='dark'?'light':'dark');
-}
-(function initTheme(){
-  const saved=localStorage.getItem('tnl_theme')||'dark';
-  applyTheme(saved);
-})();
 
 // ── INIT ──
 async function init(){
