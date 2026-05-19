@@ -410,6 +410,7 @@ input,select,textarea,button{font-family:inherit}
   <div class="hdr red">
     <div style="flex:1;font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px">&#128295; Painel Admin</div>
     <span class="rt-dot" id="rt-dot" title="Realtime"></span>
+    <button class="hdr-act" id="adm-theme-btn" onclick="toggleTheme()" title="Alternar tema">🌙</button>
     <button class="hdr-act" onclick="logout()">Sair</button>
   </div>
   <div class="scroll">
@@ -724,7 +725,7 @@ function initAdminUI(){
     <button class="tab on" id="adm-tb-home" onclick="adminTabGo('home')"><div class="tab-ic">📊</div><div class="tab-lb">Painel</div></button>
     <button class="tab" id="adm-tb-apts" onclick="adminTabGo('apts')"><div class="tab-ic">📅</div><div class="tab-lb">Agenda</div></button>
     <button class="tab" id="adm-tb-svcs" onclick="adminTabGo('svcs')"><div class="tab-ic">⚙️</div><div class="tab-lb">Serviços</div></button>`;
-  STACK=['pg-admin'];showPage('pg-admin');renderAdmin();
+  STACK=['pg-admin'];showPage('pg-admin');renderAdmin();applyTheme();
 }
 
 // ── HOME ──
@@ -1169,16 +1170,16 @@ function checkIOSHint(){
 function toggleTheme(){
   const isLight=document.documentElement.classList.toggle('light');
   localStorage.setItem('tnl_theme',isLight?'light':'dark');
-  const btn=el('hdr-theme-btn');
-  if(btn)btn.textContent=isLight?'☀️':'🌙';
+  const icon=isLight?'☀️':'🌙';
+  ['hdr-theme-btn','adm-theme-btn'].forEach(id=>{const b=el(id);if(b)b.textContent=icon;});
 }
 function applyTheme(){
   const saved=localStorage.getItem('tnl_theme');
   const preferLight=window.matchMedia('(prefers-color-scheme:light)').matches;
   const useLight=saved?saved==='light':preferLight;
   document.documentElement.classList.toggle('light',useLight);
-  const btn=el('hdr-theme-btn');
-  if(btn)btn.textContent=useLight?'☀️':'🌙';
+  const icon=useLight?'☀️':'🌙';
+  ['hdr-theme-btn','adm-theme-btn'].forEach(id=>{const b=el(id);if(b)b.textContent=icon;});
 }
 
 // ── REVIEW ──
