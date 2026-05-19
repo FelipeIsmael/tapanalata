@@ -23,6 +23,14 @@
   --indigo:#818cf8;--indigo-l:#a5b4fc;--indigo-bg:rgba(129,140,248,.08);
   --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
 }
+:root.light{
+  --bg:#f4f4f5;--bg2:#e8e8ea;--bg3:#ffffff;
+  --card:#ffffff;--card2:#f0f0f2;
+  --border:#d4d4d8;--border-r:rgba(229,29,29,.25);
+  --text:#18181b;--muted:#71717a;--muted2:#a1a1aa;
+  --indigo:#6366f1;--indigo-l:#4f46e5;--indigo-bg:rgba(99,102,241,.08);
+}
+*,*::before,*::after{transition:background-color .25s,border-color .25s,color .15s;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);overscroll-behavior:none}
 input,select,textarea,button{font-family:inherit}
@@ -288,6 +296,7 @@ input,select,textarea,button{font-family:inherit}
 <div class="page gone" id="pg-home">
   <div class="hdr red">
     <div style="flex:1;font-family:'Bebas Neue',cursive;font-size:20px;letter-spacing:2px">TAPA NA LATA</div>
+    <button class="hdr-act" id="hdr-theme-btn" onclick="toggleTheme()" title="Alternar tema">🌙</button>
     <button class="hdr-act" id="hdr-notif-btn" onclick="nav('pg-notifs')">&#128276;</button>
     <div id="hdr-av" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;cursor:pointer" onclick="nav('pg-profile')"></div>
   </div>
@@ -300,10 +309,11 @@ input,select,textarea,button{font-family:inherit}
     </div>
     <div id="active-job"></div>
     <div class="sh" style="padding-left:16px;padding-right:16px">Acesso Rápido</div>
-    <div class="qa">
+    <div class="qa" style="grid-template-columns:repeat(2,1fr)">
       <div class="qa-item" onclick="tabGo('apts')"><div class="qa-ic">&#128197;</div><div class="qa-lb">Meus<span>Agendamentos</span></div></div>
       <div class="qa-item" onclick="tabGo('svcs')"><div class="qa-ic">&#128295;</div><div class="qa-lb">Nossos<span>Serviços</span></div></div>
       <div class="qa-item" onclick="nav('pg-new')"><div class="qa-ic">&#9889;</div><div class="qa-lb">Novo<span>Agendamento</span></div></div>
+      <div class="qa-item" onclick="openReview()" style="border-color:rgba(251,188,4,.35);background:rgba(251,188,4,.05)"><div class="qa-ic">&#11088;</div><div class="qa-lb" style="color:var(--muted)">Nos<span style="color:#f59e0b">Avaliar</span></div></div>
     </div>
     <div class="sh" style="padding-left:16px;padding-right:16px">Recentes <a onclick="tabGo('apts')">Ver todos</a></div>
     <div id="home-recent" style="padding:0 16px 16px"></div>
@@ -706,7 +716,7 @@ function initClientUI(){
     <button class="tab" id="tb-new" onclick="tabGo('new')"><div class="tab-fab">➕</div><div class="tab-lb">Agendar</div></button>
     <button class="tab" id="tb-svcs" onclick="tabGo('svcs')"><div class="tab-ic">🔧</div><div class="tab-lb">Serviços</div></button>
     <button class="tab" id="tb-profile" onclick="tabGo('profile')"><div class="tab-ic">👤</div><div class="tab-lb">Perfil</div></button>`;
-  STACK=['pg-home'];showPage('pg-home');renderHome();updateNotifBadge();checkIOSHint();
+  STACK=['pg-home'];showPage('pg-home');renderHome();updateNotifBadge();checkIOSHint();applyTheme();
 }
 function initAdminUI(){
   el('tabbar').classList.remove('hidden');
@@ -1155,8 +1165,31 @@ function checkIOSHint(){
   }
 }
 
+// ── THEME ──
+function toggleTheme(){
+  const isLight=document.documentElement.classList.toggle('light');
+  localStorage.setItem('tnl_theme',isLight?'light':'dark');
+  const btn=el('hdr-theme-btn');
+  if(btn)btn.textContent=isLight?'☀️':'🌙';
+}
+function applyTheme(){
+  const saved=localStorage.getItem('tnl_theme');
+  const preferLight=window.matchMedia('(prefers-color-scheme:light)').matches;
+  const useLight=saved?saved==='light':preferLight;
+  document.documentElement.classList.toggle('light',useLight);
+  const btn=el('hdr-theme-btn');
+  if(btn)btn.textContent=useLight?'☀️':'🌙';
+}
+
+// ── REVIEW ──
+const REVIEW_URL='https://www.google.com/maps?q=Tapa+na+Lata+-+Alameda+Dr.+Jos%C3%A9+Cardeal,+241+-+Jardim+Pedroso,+Indaiatuba+-+SP,+13343-100&ftid=0x94cf4b44af301257:0xf699a92a1fefd308&entry=gps&shh=CAE&lucs=,94297699,94284454,94231188,94280568,47071704,100809209,94218641,94282134,94286869&g_ep=CAISEjI2LjE4LjAuOTA2NTA0NDMzMBgAIIgnKlIsOTQyOTc2OTksOTQyODQ0NTQsOTQyMzExODgsOTQyODA1NjgsNDcwNzE3MDQsMTAwODA5MjA5LDk0MjE4NjQxLDk0MjgyMTM0LDk0Mjg2ODY5QgJCUg%3D%3D&skid=fe7c161b-bdfe-4c8e-b14c-ee4ec5cc06c3&g_st=iw';
+function openReview(){
+  window.open(REVIEW_URL,'_blank','noopener,noreferrer');
+}
+
 // ── INIT ──
 async function init(){
+  applyTheme();
   showPage('pg-loading');
   if(SUPABASE_URL.includes('SEU-PROJETO')){
     el('pg-loading').innerHTML=`<div style="padding:32px;text-align:center;max-width:360px">
