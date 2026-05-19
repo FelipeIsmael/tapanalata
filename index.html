@@ -234,7 +234,6 @@ input,select,textarea,button{font-family:inherit}
 <!-- LOADING -->
 <div class="page" id="pg-loading">
   <div class="loading-logo">TAPA <span>NA</span> LATA</div>
-  <div id="loading-status" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:16px"></div>
   <div class="spin"></div>
 </div>
 
@@ -644,43 +643,20 @@ async function doAdminLogin(){
   await loadUserProfile(data.user);
 }
 async function loadUserProfile(authUser){
-  try{
-    setLoadingStatus('Carregando perfil…');
-    const{data:p,error}=await supa.from('profiles').select('*').eq('id',authUser.id).single();
-    if(error||!p){toast('Erro ao carregar perfil','err');await supa.auth.signOut();showPage('pg-auth');authTab('login');return;}
-    CU={id:p.id,name:p.name,email:authUser.email,role:p.role,phone:p.phone};
-    ADMIN_MODE=(p.role==='admin');
-    setLoadingStatus('Sincronizando dados…');
-    // Pequeno delay para garantir que o SDK propagou o token antes das queries RLS
-    await new Promise(r=>setTimeout(r,300));
-    await refreshCache();
-    if(ADMIN_MODE){initAdminUI();subscribeRealtime();}else{initClientUI();subscribeClientRealtime();}
-  }catch(e){
-    console.error('loadUserProfile error:',e);
-    toast('Erro ao carregar perfil. Tente novamente.','err',4000);
-    await supa.auth.signOut();
-    showPage('pg-auth');authTab('login');
-  }
+  const{data:p,error}=await supa.from('profiles').select('*').eq('id',authUser.id).single();
+  if(error||!p){toast('Erro ao carregar perfil','err');await supa.auth.signOut();return;}
+  CU={id:p.id,name:p.name,email:authUser.email,role:p.role,phone:p.phone};
+  ADMIN_MODE=(p.role==='admin');
+  await refreshCache();
+  if(ADMIN_MODE){initAdminUI();subscribeRealtime();}else{initClientUI();subscribeClientRealtime();}
 }
 async function refreshCache(){
-  try{
-    // Garante que a sessão está ativa antes de buscar dados protegidos por RLS
-    const{data:{session}}=await supa.auth.getSession();
-    if(!session){console.warn('refreshCache: sem sessão ativa');SVC_CACHE=[];ADN_CACHE=[];BLOCKED=[];return;}
-    const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms));
-    const[{data:s},{data:a},{data:b}]=await Promise.race([
-      Promise.all([
-        supa.from('services').select('*').order('sort_order'),
-        supa.from('addons').select('*').order('sort_order'),
-        supa.from('blocked_slots').select('*').order('date'),
-      ]),
-      timeout(10000).then(()=>{throw new Error('refreshCache timeout')})
-    ]);
-    SVC_CACHE=s||[];ADN_CACHE=a||[];BLOCKED=b||[];
-  }catch(e){
-    console.error('refreshCache error:',e);
-    SVC_CACHE=[];ADN_CACHE=[];BLOCKED=[];
-  }
+  const[{data:s},{data:a},{data:b}]=await Promise.all([
+    supa.from('services').select('*').order('sort_order'),
+    supa.from('addons').select('*').order('sort_order'),
+    supa.from('blocked_slots').select('*').order('date'),
+  ]);
+  SVC_CACHE=s||[];ADN_CACHE=a||[];BLOCKED=b||[];
 }
 async function logout(){
   RT_CHANNEL&&supa.removeChannel(RT_CHANNEL);
@@ -694,12 +670,15 @@ function subscribeRealtime(){
   RT_CHANNEL=supa.channel('admin-rt')
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'appointments'},pl=>{
       toast(`📅 Novo agendamento: ${pl.new.client_name}`,'ok',5000);
-      if(STACK.includes('pg-admin'))renderAdmin();
-      if(STACK.includes('pg-adm-apts'))renderAdmApts();
+      const curPage=STACK[STACK.length-1];
+      if(curPage==='pg-admin')renderAdmin();
+      else if(curPage==='pg-adm-apts')renderAdmApts();
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'appointments'},()=>{
-      if(STACK.includes('pg-admin'))renderAdmin();
-      if(STACK.includes('pg-adm-apts'))renderAdmApts();
+      const curPage=STACK[STACK.length-1];
+      // Ignora UPDATE quando admin está no detalhe (updateAptStatus já atualizou)
+      if(curPage==='pg-admin')renderAdmin();
+      else if(curPage==='pg-adm-apts')renderAdmApts();
     })
     .subscribe(st=>el('rt-dot')?.style.setProperty('background',st==='SUBSCRIBED'?'var(--green)':'var(--yellow)'));
 }
@@ -778,15 +757,16 @@ function aptCard(a){
 }
 
 // ── APT DETAIL ──
-function openAptDet(apt){
-  if(typeof apt==='string')apt=JSON.parse(apt);
+// Gera o HTML do detalhe e popula o bodyId sem navegar
+function buildAptDetHTML(apt){
   const dur=calcDur(apt);
   const steps=['Recebido','Em Andamento','Finalização','Pronto!'];
   const si={Confirmado:0,'Em Andamento':1,'Finalização':2,'Finalizado':3}[apt.status]||0;
   const bodyId=ADMIN_MODE?'adm-det-body':'apt-det-body';
-  const pageId=ADMIN_MODE?'pg-adm-det':'pg-apt-det';
   const canCancel=!ADMIN_MODE&&['Pendente','Confirmado'].includes(apt.status);
-  el(bodyId).innerHTML=`
+  const body=el(bodyId);
+  if(!body)return;
+  body.innerHTML=`
     <div class="card card-r">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><div class="nlbl" style="margin-bottom:3px">Veículo</div><div style="font-weight:700;font-size:16px">${apt.model}</div><div style="color:var(--red);font-weight:700">${apt.plate}${apt.color?' · '+apt.color:''}</div></div>
@@ -796,7 +776,7 @@ function openAptDet(apt){
       </div></div>
     ${dur?`<div class="card" style="display:flex;align-items:center;gap:14px;background:var(--indigo-bg);border-color:rgba(129,140,248,.25)"><span style="font-size:26px">⏱</span><div><div class="nlbl" style="color:var(--indigo)">Tempo Estimado</div><div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--indigo-l)">${fmtDur(dur)}</div></div></div>`:''}
     <div class="card"><div class="nlbl" style="margin-bottom:8px">Status</div><span class="tag ${tagCls(apt.status)}">${apt.status}</span>
-      ${ADMIN_MODE?`<div style="margin-top:12px"><select style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--text);padding:12px 14px;font-size:15px;outline:none;-webkit-appearance:none" onchange="updateAptStatus('${apt.id}',this.value)">
+      ${ADMIN_MODE?`<div style="margin-top:12px"><select id="status-sel-${apt.id}" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;color:var(--text);padding:12px 14px;font-size:15px;outline:none;-webkit-appearance:none" onchange="updateAptStatus('${apt.id}',this.value)">
         ${['Pendente','Confirmado','Em Andamento','Finalização','Finalizado','Cancelado'].map(s=>`<option ${s===apt.status?'selected':''}>${s}</option>`).join('')}
       </select></div>`:''}
     </div>
@@ -808,23 +788,37 @@ function openAptDet(apt){
     ${['Em Andamento','Confirmado','Finalização'].includes(apt.status)?`<div class="card card-r"><div class="nlbl" style="margin-bottom:12px">Progresso</div><div class="prog"><div class="prog-fill" style="width:${(si/3)*80}%"></div>${steps.map((s,i)=>`<div class="prog-step"><div class="prog-dot ${i<si?'done':i===si?'act':''}">${i<si?'✓':''}</div><div class="prog-lbl ${i<si?'done':i===si?'act':''}">${s}</div></div>`).join('')}</div></div>`:''}
     ${canCancel?`<div style="margin-top:4px"><button class="btn btn-danger btn-w" onclick="cancelApt('${apt.id}')">Cancelar Agendamento</button></div>`:''}
     <div style="height:8px"></div>`;
+}
+function openAptDet(apt){
+  if(typeof apt==='string')apt=JSON.parse(apt);
+  const pageId=ADMIN_MODE?'pg-adm-det':'pg-apt-det';
+  buildAptDetHTML(apt);
   nav(pageId);
 }
+// refreshAptDetInPlace removido — buildAptDetHTML substitui com segurança
 async function cancelApt(id){
   const ok=await cfm('Cancelar agendamento?','Tem certeza? Esta ação não pode ser desfeita.','Sim, cancelar','btn-danger');
   if(!ok)return;
   const{error}=await supa.from('appointments').update({status:'Cancelado',updated_at:now()}).eq('id',id);
   if(error){toast('Erro ao cancelar','err');return;}
-  toast('Agendamento cancelado');back();renderApts();
+  toast('Agendamento cancelado');
+  back();
+  await renderApts();
 }
 async function updateAptStatus(id,status){
+  // Desabilita o select para evitar duplo disparo durante o await
+  const selEl=el('adm-det-body')?.querySelector('select');
+  if(selEl)selEl.disabled=true;
   const{data,error}=await supa.from('appointments').update({status,updated_at:now()}).eq('id',id).select().single();
-  if(error){toast('Erro ao atualizar','err');return;}
+  if(error){toast('Erro ao atualizar','err');if(selEl)selEl.disabled=false;return;}
   toast(`Status: ${status}`);
-  await supa.from('notifications').insert({user_id:data.user_id,type:'status',title:`Status: ${status}`,body:`${(data.service_names||[]).join(', ')} — ${fmtDate(data.date)} às ${data.time}h`});
-  await Promise.all([renderAdmApts(),renderAdmin()]);
-  const fresh=ALL_APTS.find(a=>a.id===id)||data;
-  openAptDet(fresh);
+  // Notificação em background (não bloqueia UI)
+  supa.from('notifications').insert({user_id:data.user_id,type:'status',title:`Status: ${status}`,body:`${(data.service_names||[]).join(', ')} — ${fmtDate(data.date)} às ${data.time}h`});
+  // Re-renderiza o detalhe completo in-place sem navegar
+  buildAptDetHTML(data);
+  // Atualiza listas em background sem bloquear
+  renderAdmin();
+  renderAdmApts();
 }
 
 // ── CLIENT APTS ──
@@ -1162,11 +1156,8 @@ function checkIOSHint(){
 }
 
 // ── INIT ──
-function setLoadingStatus(msg){const e=document.getElementById('loading-status');if(e)e.textContent=msg;}
 async function init(){
   showPage('pg-loading');
-  // Safety timeout: if loading takes more than 8s, go to login
-  const _loadTimeout=setTimeout(()=>{if(document.getElementById('pg-loading')&&!document.getElementById('pg-loading').classList.contains('gone')){showPage('pg-auth');authTab('login');toast('Tempo de conexão esgotado. Tente novamente.','err',4000);}},8000);
   if(SUPABASE_URL.includes('SEU-PROJETO')){
     el('pg-loading').innerHTML=`<div style="padding:32px;text-align:center;max-width:360px">
       <div style="font-size:40px;margin-bottom:16px">⚙️</div>
@@ -1180,16 +1171,9 @@ async function init(){
     return;
   }
   if(window.location.hash.includes('type=recovery')){showPage('pg-auth');authTab('login');toast('Defina sua nova senha','ok',4000);return;}
-  try{
-    setLoadingStatus('Verificando sessão…');
-    const{data:{session}}=await supa.auth.getSession();
-    clearTimeout(_loadTimeout);
-    if(session?.user){await loadUserProfile(session.user);return;}
-    showPage('pg-auth');authTab('login');
-  }catch(e){
-    console.error('Init error:',e);
-    showPage('pg-auth');authTab('login');
-  }
+  const{data:{session}}=await supa.auth.getSession();
+  if(session?.user){await loadUserProfile(session.user);return;}
+  showPage('pg-auth');authTab('login');
 }
 init();
 
