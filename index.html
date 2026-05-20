@@ -423,6 +423,7 @@ input,select,textarea,button{font-family:inherit}
       <button class="btn btn-o btn-w" onclick="adminTabGo('apts')">&#128197; Todos os Agendamentos</button>
       <button class="btn btn-o btn-w" onclick="adminTabGo('svcs')">&#9881;&#65039; Gerenciar Serviços</button>
       <button class="btn btn-o btn-w" onclick="nav('pg-blocked')">&#128683; Horários Bloqueados</button>
+      <button class="btn btn-w" onclick="downloadDailyReport()" style="background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;box-shadow:0 4px 18px rgba(229,29,29,.35)">&#128196; Relatório do Dia</button>
     </div>
   </div>
 </div>
@@ -1164,6 +1165,148 @@ function checkIOSHint(){
   if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.navigator.standalone&&!localStorage.getItem('tnl_ios')){
     setTimeout(()=>{toast('📱 Safari → Compartilhar → "Adicionar à Tela de Início"','ok',6000);localStorage.setItem('tnl_ios','1');},5000);
   }
+}
+
+// ── RELATÓRIO PDF ──
+async function downloadDailyReport(){
+  const today=new Date().toISOString().split('T')[0];
+  const todayFmt=new Date(today+'T12:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+  // Busca agendamentos do dia (todos os status exceto cancelado)
+  const{data,error}=await supa.from('appointments')
+    .select('*')
+    .eq('date',today)
+    .neq('status','Cancelado')
+    .order('time');
+
+  if(error){toast('Erro ao buscar dados','err');return;}
+  const apts=data||[];
+
+  if(!apts.length){
+    toast('Nenhum agendamento para hoje','err',3500);
+    return;
+  }
+
+  // Gera HTML do relatório
+  const statusColor={
+    'Pendente':'#f59e0b','Confirmado':'#22c55e',
+    'Em Andamento':'#e51d1d','Finalização':'#e51d1d',
+    'Finalizado':'#818cf8'
+  };
+
+  const rows=apts.map((a,i)=>{
+    const svcs=(a.service_names||[]).join(', ')||'–';
+    const adns=(a.addon_names||[]).length?`<br><span style="font-size:11px;color:#888">Adicionais: ${(a.addon_names||[]).join(', ')}</span>`:'';
+    const sc=statusColor[a.status]||'#888';
+    const dur=calcDur(a);
+    const durStr=dur?` &nbsp;⏱ ${fmtDur(dur)}`:'';
+    return `<tr style="background:${i%2===0?'#fff':'#f9f9fb'}">
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-size:22px;font-weight:900;color:#e51d1d;font-family:Arial,sans-serif;line-height:1">${a.time}h</div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px">${durStr}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-weight:700;font-size:14px">${a.client_name}</div>
+        <div style="font-size:12px;color:#666;margin-top:1px">${a.client_phone||a.client_email||''}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-size:13px;font-weight:600">${svcs}${adns}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-weight:700;font-size:14px;color:#e51d1d">${a.plate}</div>
+        <div style="font-size:12px;color:#666">${a.model}${a.color?' · '+a.color:''}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top;text-align:center">
+        <span style="display:inline-block;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:700;background:${sc}22;color:${sc};border:1px solid ${sc}55">${a.status}</span>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid #eee;vertical-align:top;text-align:right;font-family:Arial,sans-serif;font-weight:700;font-size:15px;color:#e51d1d">
+        ${fmtMoney(a.total)}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalRev=apts.reduce((t,a)=>t+a.total,0);
+  const confirmados=apts.filter(a=>a.status==='Confirmado').length;
+  const andamento=apts.filter(a=>['Em Andamento','Finalização'].includes(a.status)).length;
+  const finalizados=apts.filter(a=>a.status==='Finalizado').length;
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Relatório Tapa na Lata — ${todayFmt}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f5;color:#18181b;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:900px;margin:0 auto;padding:24px}
+    .header{background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;border-radius:16px;padding:28px 32px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-end}
+    .brand{font-size:28px;font-weight:900;letter-spacing:2px}
+    .brand span{opacity:.75}
+    .date-info{text-align:right;font-size:13px;opacity:.9;line-height:1.6}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+    .stat{background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    .stat-val{font-size:32px;font-weight:900;font-family:Arial,sans-serif;line-height:1;margin-bottom:4px}
+    .stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}
+    .table-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:20px}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#e51d1d}
+    thead th{padding:12px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#fff}
+    thead th:last-child{text-align:right}
+    .footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px}
+    @media print{body{background:#fff}.wrap{padding:0}@page{margin:16mm}}
+  </style></head><body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="brand">TAPA <span>NA</span> LATA</div>
+        <div style="font-size:13px;opacity:.85;margin-top:4px">Estética Automotiva</div>
+      </div>
+      <div class="date-info">
+        <div style="font-size:16px;font-weight:700">${todayFmt}</div>
+        <div>Relatório de Serviços do Dia</div>
+        <div>Gerado às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-val" style="color:#18181b">${apts.length}</div><div class="stat-lbl">Total do Dia</div></div>
+      <div class="stat"><div class="stat-val" style="color:#22c55e">${confirmados}</div><div class="stat-lbl">Confirmados</div></div>
+      <div class="stat"><div class="stat-val" style="color:#818cf8">${finalizados}</div><div class="stat-lbl">Finalizados</div></div>
+      <div class="stat"><div class="stat-val" style="color:#e51d1d;font-size:22px">${fmtMoney(totalRev)}</div><div class="stat-lbl">Faturamento</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Horário</th>
+          <th>Cliente</th>
+          <th>Serviços</th>
+          <th>Veículo</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    ${apts.some(a=>a.notes)?`
+    <div class="table-wrap" style="padding:16px 20px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:12px">Observações</div>
+      ${apts.filter(a=>a.notes).map(a=>`
+        <div style="padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px">
+          <span style="font-weight:700;color:#e51d1d">${a.time}h ${a.plate}</span>
+          <span style="color:#444;margin-left:8px">${a.notes}</span>
+        </div>`).join('')}
+    </div>`:''}
+
+    <div class="footer">Tapa na Lata · Alameda Dr. José Cardeal, 241 — Jardim Pedroso, Indaiatuba-SP · Relatório gerado pelo sistema</div>
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`;
+
+  // Abre em nova aba e dispara impressão/salvar como PDF
+  const w=window.open('','_blank');
+  if(!w){toast('Permita pop-ups para baixar o relatório','err',4000);return;}
+  w.document.write(html);
+  w.document.close();
+  toast('Relatório gerado! Use Imprimir → Salvar como PDF 🖨️','ok',5000);
 }
 
 // ── THEME ──
