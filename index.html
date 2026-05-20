@@ -422,6 +422,7 @@ input,select,textarea,button{font-family:inherit}
     <div style="padding:0 16px 20px;display:flex;flex-direction:column;gap:10px">
       <button class="btn btn-o btn-w" onclick="adminTabGo('apts')">&#128197; Todos os Agendamentos</button>
       <button class="btn btn-o btn-w" onclick="adminTabGo('svcs')">&#9881;&#65039; Gerenciar Serviços</button>
+      <button class="btn btn-o btn-w" onclick="adminTabGo('clients')">&#128100; Histórico de Clientes</button>
       <button class="btn btn-o btn-w" onclick="nav('pg-blocked')">&#128683; Horários Bloqueados</button>
       <button class="btn btn-w" onclick="downloadDailyReport()" style="background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;box-shadow:0 4px 18px rgba(229,29,29,.35)">&#128196; Relatório do Dia</button>
     </div>
@@ -460,6 +461,23 @@ input,select,textarea,button{font-family:inherit}
     <div class="card" style="margin:0 16px;padding:0"><div id="adm-adns-rows"></div></div>
     <div style="height:20px"></div>
   </div>
+</div>
+
+<!-- ADMIN CLIENT HISTORY -->
+<div class="page gone" id="pg-adm-clients">
+  <div class="hdr"><button class="hdr-back" onclick="back()">&#8249;</button><div class="hdr-title">Histórico de Clientes</div></div>
+  <div class="search-bar"><span>&#128269;</span><input type="text" id="client-search" placeholder="Buscar por nome, telefone ou e-mail…" oninput="filterClients()"></div>
+  <div class="scroll" id="client-list" style="padding-bottom:calc(var(--safe-b)+80px)"></div>
+</div>
+
+<!-- ADMIN CLIENT DETAIL -->
+<div class="page gone" id="pg-adm-client-det">
+  <div class="hdr">
+    <button class="hdr-back" onclick="back()">&#8249;</button>
+    <div class="hdr-title" id="client-det-title">Cliente</div>
+    <button class="hdr-act" onclick="exportClientReport()" title="Exportar PDF">&#128196;</button>
+  </div>
+  <div class="scroll pad" style="padding-top:16px" id="client-det-body"></div>
 </div>
 
 <!-- BLOCKED SLOTS -->
@@ -583,7 +601,7 @@ function tabGo(tab){
   showPage(id);renderPage(id);
 }
 function adminTabGo(tab){
-  const map={home:'pg-admin',apts:'pg-adm-apts',svcs:'pg-adm-svcs'};
+  const map={home:'pg-admin',apts:'pg-adm-apts',svcs:'pg-adm-svcs',clients:'pg-adm-clients'};
   const id=map[tab];if(!id)return;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   el('adm-tb-'+tab)?.classList.add('on');
@@ -596,7 +614,7 @@ function renderPage(id){
     'pg-new':renderNew,'pg-profile':renderProfile,'pg-notifs':renderNotifs,
     'pg-edit-profile':renderEditProfile,
     'pg-admin':renderAdmin,'pg-adm-apts':renderAdmApts,'pg-adm-svcs':renderAdmSvcs,
-    'pg-blocked':renderBlocked,
+    'pg-blocked':renderBlocked,'pg-adm-clients':renderAdmClients,
   }[id]||function(){})();
 }
 
@@ -725,6 +743,7 @@ function initAdminUI(){
   el('tabbar').innerHTML=`
     <button class="tab on" id="adm-tb-home" onclick="adminTabGo('home')"><div class="tab-ic">📊</div><div class="tab-lb">Painel</div></button>
     <button class="tab" id="adm-tb-apts" onclick="adminTabGo('apts')"><div class="tab-ic">📅</div><div class="tab-lb">Agenda</div></button>
+    <button class="tab" id="adm-tb-clients" onclick="adminTabGo('clients')"><div class="tab-ic">👥</div><div class="tab-lb">Clientes</div></button>
     <button class="tab" id="adm-tb-svcs" onclick="adminTabGo('svcs')"><div class="tab-ic">⚙️</div><div class="tab-lb">Serviços</div></button>`;
   STACK=['pg-admin'];showPage('pg-admin');renderAdmin();applyTheme();
 }
@@ -1307,6 +1326,290 @@ async function downloadDailyReport(){
   w.document.write(html);
   w.document.close();
   toast('Relatório gerado! Use Imprimir → Salvar como PDF 🖨️','ok',5000);
+}
+
+// ── HISTÓRICO DE CLIENTES ──
+let ALL_CLIENTS=[], CUR_CLIENT=null;
+
+async function renderAdmClients(){
+  el('client-search').value='';
+  el('client-list').innerHTML=`<div class="empty"><div class="spin"></div></div>`;
+
+  // Busca todos os agendamentos agrupados por cliente
+  const{data,error}=await supa.from('appointments')
+    .select('*')
+    .order('date',{ascending:false});
+
+  if(error){toast('Erro ao carregar','err');return;}
+
+  // Agrupa por user_id
+  const map={};
+  (data||[]).forEach(a=>{
+    if(!map[a.user_id]){
+      map[a.user_id]={
+        id:a.user_id,
+        name:a.client_name,
+        phone:a.client_phone,
+        email:a.client_email,
+        apts:[],
+        total:0,
+        lastDate:a.date
+      };
+    }
+    map[a.user_id].apts.push(a);
+    if(a.status==='Finalizado') map[a.user_id].total+=a.total;
+    if(a.date>map[a.user_id].lastDate) map[a.user_id].lastDate=a.date;
+  });
+
+  ALL_CLIENTS=Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
+  renderClientList(ALL_CLIENTS);
+}
+
+function renderClientList(list){
+  const e=el('client-list');
+  if(!list.length){
+    e.innerHTML=`<div class="empty"><div class="empty-ic">👥</div><div class="empty-t">Nenhum cliente encontrado</div></div>`;
+    return;
+  }
+  e.innerHTML=`<div style="padding:8px 16px 0">` +
+    list.map(cl=>{
+      const total=cl.apts.length;
+      const finalizados=cl.apts.filter(a=>a.status==='Finalizado').length;
+      const ultimo=cl.lastDate?fmtDate(cl.lastDate):'–';
+      const ini=initials(cl.name);
+      // veículos únicos por placa
+      const veiculos=[...new Set(cl.apts.map(a=>a.plate))];
+      return `<div class="card" style="cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px" onclick='openClientDet(${JSON.stringify({id:cl.id,name:cl.name,phone:cl.phone,email:cl.email}).replace(/'/g,"&#39;")})'>
+        <div style="width:46px;height:46px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:18px;color:#fff;flex-shrink:0">${ini}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cl.name}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:1px">${cl.phone||cl.email||'–'}</div>
+          <div style="font-size:11px;color:var(--muted2);margin-top:3px">Último: ${ultimo} · Placas: ${veiculos.join(', ')}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:var(--red)">${total}</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">serviços</div>
+          <div style="font-size:11px;color:var(--green);font-weight:700;margin-top:2px">${fmtMoney(cl.total)}</div>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+}
+
+function filterClients(){
+  const q=(el('client-search')?.value||'').toLowerCase().trim();
+  if(!q){renderClientList(ALL_CLIENTS);return;}
+  const f=ALL_CLIENTS.filter(cl=>
+    (cl.name||'').toLowerCase().includes(q)||
+    (cl.phone||'').toLowerCase().includes(q)||
+    (cl.email||'').toLowerCase().includes(q)
+  );
+  renderClientList(f);
+}
+
+async function openClientDet(info){
+  if(typeof info==='string')info=JSON.parse(info);
+  CUR_CLIENT=info;
+
+  el('client-det-title').textContent=info.name.split(' ')[0];
+  el('client-det-body').innerHTML=`<div class="empty"><div class="spin"></div></div>`;
+  nav('pg-adm-client-det');
+
+  const{data,error}=await supa.from('appointments')
+    .select('*')
+    .eq('user_id',info.id)
+    .order('date',{ascending:false});
+
+  if(error){el('client-det-body').innerHTML='<div class="empty"><div class="empty-t">Erro ao carregar</div></div>';return;}
+
+  const apts=data||[];
+  buildClientDetHTML(info, apts);
+}
+
+function buildClientDetHTML(info, apts){
+  const total=apts.length;
+  const finalizados=apts.filter(a=>a.status==='Finalizado').length;
+  const faturado=apts.filter(a=>a.status==='Finalizado').reduce((t,a)=>t+a.total,0);
+  const veiculos=[...new Map(apts.map(a=>[a.plate,{plate:a.plate,model:a.model,color:a.color}])).values()];
+  const pendentes=apts.filter(a=>['Pendente','Confirmado','Em Andamento','Finalização'].includes(a.status)).length;
+
+  const aptCards=apts.map(a=>{
+    const dur=calcDur(a);
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick='openAptDet(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
+        <div style="background:var(--bg3);border-radius:9px;padding:8px 10px;text-align:center;flex-shrink:0;min-width:52px">
+          <div style="font-family:'Bebas Neue',cursive;font-size:26px;line-height:1;color:var(--red)">${String(new Date(a.date+'T12:00').getDate()).padStart(2,'0')}</div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">${new Date(a.date+'T12:00').toLocaleString('pt-BR',{month:'short'}).replace('.','')}</div>
+          <div style="font-size:9px;color:var(--muted2)">${new Date(a.date+'T12:00').getFullYear()}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+            <span class="tag ${tagCls(a.status)}">${a.status}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--muted)">${a.time}h</span>
+            ${dur?`<span class="dur-badge">⏱ ${fmtDur(dur)}</span>`:''}
+          </div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:2px">${(a.service_names||[]).join(', ')||'–'}</div>
+          ${(a.addon_names||[]).length?`<div style="font-size:12px;color:var(--muted)">+ ${(a.addon_names||[]).join(', ')}</div>`:''}
+        </div>
+        <div style="font-family:'Bebas Neue',cursive;font-size:20px;color:var(--red);flex-shrink:0">${fmtMoney(a.total)}</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;display:flex;gap:16px;flex-wrap:wrap">
+        <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px">Veículo</div>
+          <div style="font-size:13px;font-weight:700">${a.model}</div></div>
+        <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px">Placa</div>
+          <div style="font-size:13px;font-weight:700;color:var(--red)">${a.plate}</div></div>
+        ${a.color?`<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px">Cor</div>
+          <div style="font-size:13px;font-weight:700">${a.color}</div></div>`:''}
+        ${a.notes?`<div style="width:100%;border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:3px">Observações</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5">${a.notes}</div></div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  el('client-det-body').innerHTML=`
+    <!-- Perfil do cliente -->
+    <div class="card card-r" style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+      <div style="width:54px;height:54px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',cursive;font-size:20px;color:#fff;flex-shrink:0">${initials(info.name)}</div>
+      <div style="flex:1">
+        <div style="font-size:18px;font-weight:700">${info.name}</div>
+        ${info.phone?`<div style="font-size:13px;color:var(--muted);margin-top:1px">📞 ${info.phone}</div>`:''}
+        ${info.email?`<div style="font-size:13px;color:var(--muted)">✉️ ${info.email}</div>`:''}
+      </div>
+    </div>
+
+    <!-- Stats do cliente -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+      <div class="stat"><div class="sl">Serviços</div><div class="sv red">${total}</div><div class="sc">total</div></div>
+      <div class="stat"><div class="sl">Finalizados</div><div class="sv green" style="font-size:30px">${finalizados}</div><div class="sc">concluídos</div></div>
+      <div class="stat"><div class="sl">Faturado</div><div class="sv red" style="font-size:20px">${fmtMoney(faturado)}</div><div class="sc">total pago</div></div>
+    </div>
+
+    <!-- Veículos do cliente -->
+    ${veiculos.length?`
+    <div class="sh" style="padding-top:0">Veículos Cadastrados</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      ${veiculos.map(v=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">🚗</span>
+        <div><div style="font-weight:700;font-size:13px">${v.plate}</div><div style="font-size:11px;color:var(--muted)">${v.model}${v.color?' · '+v.color:''}</div></div>
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Pendentes aviso -->
+    ${pendentes?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--yellow);font-weight:600">⚠️ ${pendentes} agendamento${pendentes>1?'s':''} em aberto</div>`:''}
+
+    <!-- Histórico de atendimentos -->
+    <div class="sh" style="padding-top:0">Histórico de Atendimentos <span style="color:var(--muted);font-weight:400">(${total})</span></div>
+    ${apts.length?aptCards:`<div class="empty"><div class="empty-ic">🗓</div><div class="empty-t">Nenhum atendimento</div></div>`}
+    <div style="height:8px"></div>`;
+
+  // salva para exportar depois
+  CUR_CLIENT._apts=apts;
+}
+
+function exportClientReport(){
+  if(!CUR_CLIENT||!CUR_CLIENT._apts){toast('Carregue um cliente primeiro','err');return;}
+  const info=CUR_CLIENT;
+  const apts=info._apts;
+  const faturado=apts.filter(a=>a.status==='Finalizado').reduce((t,a)=>t+a.total,0);
+
+  const rows=apts.map((a,i)=>{
+    const svcs=(a.service_names||[]).join(', ')||'–';
+    const adns=(a.addon_names||[]).join(', ')||'–';
+    const dur=calcDur(a);
+    const sc={'Confirmado':'#22c55e','Pendente':'#f59e0b','Em Andamento':'#e51d1d','Finalização':'#e51d1d','Finalizado':'#818cf8','Cancelado':'#888'}[a.status]||'#888';
+    return `<tr style="background:${i%2===0?'#fff':'#f9f9fb'}">
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top">
+        <div style="font-weight:700">${fmtDate(a.date)}</div>
+        <div style="font-size:12px;color:#888">${a.time}h${dur?' · '+fmtDur(dur):''}</div>
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-weight:600;font-size:13px">${svcs}</div>
+        ${adns!=='–'?`<div style="font-size:11px;color:#888;margin-top:2px">+ ${adns}</div>`:''}
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top">
+        <div style="font-weight:700;color:#e51d1d">${a.plate}</div>
+        <div style="font-size:12px;color:#666">${a.model}${a.color?' · '+a.color:''}</div>
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top;text-align:center">
+        <span style="display:inline-block;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;background:${sc}22;color:${sc};border:1px solid ${sc}55">${a.status}</span>
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top;text-align:right;font-weight:700;color:#e51d1d">${fmtMoney(a.total)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top;font-size:12px;color:#666;max-width:180px">${a.notes||'–'}</td>
+    </tr>`;
+  }).join('');
+
+  const veiculos=[...new Map(apts.map(a=>[a.plate,`${a.plate} – ${a.model}${a.color?' ('+a.color+')':''}`])).values()].join(' | ');
+  const gerado=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Histórico – ${info.name}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:960px;margin:0 auto;padding:24px}
+    .header{background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+    .brand{font-size:22px;font-weight:900;letter-spacing:2px;opacity:.85;margin-bottom:4px}
+    .client-name{font-size:26px;font-weight:900}
+    .client-meta{font-size:13px;opacity:.85;margin-top:4px;line-height:1.7}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+    .stat{background:#fff;border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .stat-val{font-size:28px;font-weight:900;line-height:1;margin-bottom:3px}
+    .stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}
+    .table-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#e51d1d}
+    thead th{padding:11px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#fff}
+    thead th:last-child{text-align:left}
+    .footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px}
+    @media print{body{background:#fff}.wrap{padding:0}@page{margin:14mm}}
+  </style></head><body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="brand">TAPA NA LATA</div>
+        <div class="client-name">${info.name}</div>
+        <div class="client-meta">
+          ${info.phone?'📞 '+info.phone+'&nbsp;&nbsp;':''}${info.email?'✉️ '+info.email:''}
+          ${veiculos?'<br>🚗 '+veiculos:''}
+        </div>
+      </div>
+      <div style="text-align:right;font-size:13px;opacity:.9;line-height:1.8">
+        <div style="font-size:15px;font-weight:700">Histórico de Atendimentos</div>
+        <div>Gerado em ${gerado}</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-val" style="color:#18181b">${apts.length}</div><div class="stat-lbl">Total</div></div>
+      <div class="stat"><div class="stat-val" style="color:#22c55e">${apts.filter(a=>a.status==='Finalizado').length}</div><div class="stat-lbl">Finalizados</div></div>
+      <div class="stat"><div class="stat-val" style="color:#f59e0b">${apts.filter(a=>['Pendente','Confirmado'].includes(a.status)).length}</div><div class="stat-lbl">Pendentes</div></div>
+      <div class="stat"><div class="stat-val" style="color:#e51d1d;font-size:18px">${fmtMoney(faturado)}</div><div class="stat-lbl">Faturado</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Data / Hora</th>
+          <th>Serviços</th>
+          <th>Veículo</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:right">Total</th>
+          <th>Observações</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div class="footer">Tapa na Lata · Alameda Dr. José Cardeal, 241 — Jardim Pedroso, Indaiatuba-SP</div>
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  if(!w){toast('Permita pop-ups para exportar','err',4000);return;}
+  w.document.write(html);
+  w.document.close();
+  toast('Relatório gerado! Salve como PDF 🖨️','ok',4000);
 }
 
 // ── THEME ──
