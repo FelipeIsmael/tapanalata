@@ -423,6 +423,7 @@ input,select,textarea,button{font-family:inherit}
       <button class="btn btn-o btn-w" onclick="adminTabGo('apts')">&#128197; Todos os Agendamentos</button>
       <button class="btn btn-o btn-w" onclick="adminTabGo('svcs')">&#9881;&#65039; Gerenciar Serviços</button>
       <button class="btn btn-o btn-w" onclick="adminTabGo('clients')">&#128100; Histórico de Clientes</button>
+      <button class="btn btn-o btn-w" onclick="adminTabGo('stock')">&#128230; Controle de Estoque</button>
       <button class="btn btn-o btn-w" onclick="nav('pg-blocked')">&#128683; Horários Bloqueados</button>
       <button class="btn btn-w" onclick="downloadDailyReport()" style="background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;box-shadow:0 4px 18px rgba(229,29,29,.35)">&#128196; Relatório do Dia</button>
     </div>
@@ -478,6 +479,33 @@ input,select,textarea,button{font-family:inherit}
     <button class="hdr-act" onclick="exportClientReport()" title="Exportar PDF">&#128196;</button>
   </div>
   <div class="scroll pad" style="padding-top:16px" id="client-det-body"></div>
+</div>
+
+<!-- STOCK PAGE -->
+<div class="page gone" id="pg-adm-stock">
+  <div class="hdr red">
+    <div style="flex:1;font-family:'Bebas Neue',cursive;font-size:18px;letter-spacing:1px">&#128230; Estoque</div>
+    <button class="hdr-act" onclick="openStockReport()" title="Relatório">&#128196;</button>
+    <button class="hdr-act" onclick="openAddProduct()" title="Novo produto">&#43;</button>
+  </div>
+  <div style="padding:10px 16px 0">
+    <div class="search-bar"><span>&#128269;</span><input type="text" id="stock-search" placeholder="Buscar produto…" oninput="filterStock()"></div>
+    <div style="display:flex;gap:8px;margin-bottom:2px;overflow-x:auto;padding-bottom:4px" id="stock-filter-btns">
+      <button class="tag" style="cursor:pointer;padding:6px 14px;white-space:nowrap" onclick="setStockFilter('all')" id="sf-all">Todos</button>
+      <button class="tag" style="cursor:pointer;padding:6px 14px;white-space:nowrap;background:rgba(229,29,29,.15);color:var(--red);border-color:var(--red)" onclick="setStockFilter('low')" id="sf-low">&#9888; Estoque Baixo</button>
+    </div>
+  </div>
+  <div class="scroll" id="stock-list" style="padding:8px 16px;padding-bottom:calc(var(--safe-b)+80px)"></div>
+</div>
+
+<!-- STOCK PRODUCT DETAIL/EDIT -->
+<div class="page gone" id="pg-stock-det">
+  <div class="hdr">
+    <button class="hdr-back" onclick="back()">&#8249;</button>
+    <div class="hdr-title" id="stock-det-title">Produto</div>
+    <button class="hdr-act" style="color:var(--red)" onclick="deleteProduct()" title="Excluir">&#128465;</button>
+  </div>
+  <div class="scroll pad" style="padding-top:16px" id="stock-det-body"></div>
 </div>
 
 <!-- BLOCKED SLOTS -->
@@ -601,7 +629,7 @@ function tabGo(tab){
   showPage(id);renderPage(id);
 }
 function adminTabGo(tab){
-  const map={home:'pg-admin',apts:'pg-adm-apts',svcs:'pg-adm-svcs',clients:'pg-adm-clients'};
+  const map={home:'pg-admin',apts:'pg-adm-apts',svcs:'pg-adm-svcs',clients:'pg-adm-clients',stock:'pg-adm-stock'};
   const id=map[tab];if(!id)return;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   el('adm-tb-'+tab)?.classList.add('on');
@@ -614,7 +642,7 @@ function renderPage(id){
     'pg-new':renderNew,'pg-profile':renderProfile,'pg-notifs':renderNotifs,
     'pg-edit-profile':renderEditProfile,
     'pg-admin':renderAdmin,'pg-adm-apts':renderAdmApts,'pg-adm-svcs':renderAdmSvcs,
-    'pg-blocked':renderBlocked,'pg-adm-clients':renderAdmClients,
+    'pg-blocked':renderBlocked,'pg-adm-clients':renderAdmClients,'pg-adm-stock':renderStock,
   }[id]||function(){})();
 }
 
@@ -744,6 +772,7 @@ function initAdminUI(){
     <button class="tab on" id="adm-tb-home" onclick="adminTabGo('home')"><div class="tab-ic">📊</div><div class="tab-lb">Painel</div></button>
     <button class="tab" id="adm-tb-apts" onclick="adminTabGo('apts')"><div class="tab-ic">📅</div><div class="tab-lb">Agenda</div></button>
     <button class="tab" id="adm-tb-clients" onclick="adminTabGo('clients')"><div class="tab-ic">👥</div><div class="tab-lb">Clientes</div></button>
+    <button class="tab" id="adm-tb-stock" onclick="adminTabGo('stock')"><div class="tab-ic">📦</div><div class="tab-lb">Estoque</div></button>
     <button class="tab" id="adm-tb-svcs" onclick="adminTabGo('svcs')"><div class="tab-ic">⚙️</div><div class="tab-lb">Serviços</div></button>`;
   STACK=['pg-admin'];showPage('pg-admin');renderAdmin();applyTheme();
 }
@@ -1326,6 +1355,321 @@ async function downloadDailyReport(){
   w.document.write(html);
   w.document.close();
   toast('Relatório gerado! Use Imprimir → Salvar como PDF 🖨️','ok',5000);
+}
+
+// ── ESTOQUE ──
+let ALL_PRODUCTS=[], STOCK_FILTER='all', CUR_PRODUCT=null;
+
+const STOCK_CATS=['Polimento','Lavagem','Proteção','Limpeza','Abrasivo','Aplicação','Outros'];
+
+async function renderStock(){
+  el('stock-search').value='';
+  el('stock-list').innerHTML=`<div class="empty"><div class="spin"></div></div>`;
+  const{data,error}=await supa.from('stock').select('*').order('name');
+  if(error){toast('Erro ao carregar estoque','err');return;}
+  ALL_PRODUCTS=data||[];
+  renderStockList();
+}
+
+function renderStockList(){
+  const q=(el('stock-search')?.value||'').toLowerCase().trim();
+  let list=ALL_PRODUCTS;
+  if(STOCK_FILTER==='low') list=list.filter(p=>p.quantity<=p.min_quantity);
+  if(q) list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.category||'').toLowerCase().includes(q)||(p.brand||'').toLowerCase().includes(q));
+
+  const e=el('stock-list');
+  if(!list.length){
+    e.innerHTML=`<div class="empty"><div class="empty-ic">📦</div><div class="empty-t">${STOCK_FILTER==='low'?'Nenhum produto com estoque baixo!':'Nenhum produto cadastrado'}</div>${STOCK_FILTER==='all'?`<button class="btn btn-o" style="margin-top:12px" onclick="openAddProduct()">+ Adicionar Produto</button>`:''}</div>`;
+    return;
+  }
+
+  // Agrupa por categoria
+  const byCat={};
+  list.forEach(p=>{
+    const cat=p.category||'Outros';
+    if(!byCat[cat])byCat[cat]=[];
+    byCat[cat].push(p);
+  });
+
+  const lowCount=ALL_PRODUCTS.filter(p=>p.quantity<=p.min_quantity).length;
+  let html='';
+
+  if(lowCount&&STOCK_FILTER==='all'){
+    html+=`<div style="background:rgba(229,29,29,.08);border:1px solid rgba(229,29,29,.25);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;color:var(--red)">⚠️ ${lowCount} produto${lowCount>1?'s':''} com estoque baixo ou zerado</div>`;
+  }
+
+  Object.entries(byCat).sort().forEach(([cat,prods])=>{
+    html+=`<div class="sh" style="padding:12px 0 6px;font-size:11px">${cat}</div>`;
+    prods.forEach(p=>{
+      const low=p.quantity<=p.min_quantity;
+      const pct=p.min_quantity>0?Math.min(100,Math.round((p.quantity/Math.max(p.min_quantity*2,1))*100)):100;
+      const barColor=p.quantity===0?'var(--red)':low?'#f59e0b':'var(--green)';
+      html+=`<div class="card" style="cursor:pointer;margin-bottom:8px;border-color:${low?'rgba(229,29,29,.3)':'var(--border)'}" onclick='openStockDet(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${p.icon||'📦'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-weight:700;font-size:14px">${p.name}</span>
+              ${low?`<span style="font-size:10px;font-weight:700;color:${p.quantity===0?'var(--red)':'#f59e0b'};background:${p.quantity===0?'rgba(229,29,29,.12)':'rgba(245,158,11,.12)'};padding:2px 7px;border-radius:100px">${p.quantity===0?'ZERADO':'BAIXO'}</span>`:''}
+            </div>
+            ${p.brand?`<div style="font-size:11px;color:var(--muted);margin-top:1px">${p.brand}</div>`:''}
+            <div style="margin-top:6px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width .4s"></div>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:'Bebas Neue',cursive;font-size:28px;color:${barColor};line-height:1">${p.quantity}</div>
+            <div style="font-size:10px;color:var(--muted)">${p.unit||'un'}</div>
+            <div style="font-size:10px;color:var(--muted2);margin-top:1px">mín. ${p.min_quantity}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+  });
+
+  e.innerHTML=html;
+}
+
+function filterStock(){renderStockList();}
+
+function setStockFilter(f){
+  STOCK_FILTER=f;
+  ['all','low'].forEach(k=>{
+    const b=el('sf-'+k);
+    if(!b)return;
+    if(k===f){b.style.background='rgba(229,29,29,.15)';b.style.color='var(--red)';b.style.borderColor='var(--red)';}
+    else{b.style.background='';b.style.color='';b.style.borderColor='';}
+  });
+  renderStockList();
+}
+
+function openAddProduct(){
+  CUR_PRODUCT=null;
+  el('stock-det-title').textContent='Novo Produto';
+  el('stock-det-body').innerHTML=buildStockForm(null);
+  nav('pg-stock-det');
+}
+
+function openStockDet(p){
+  if(typeof p==='string')p=JSON.parse(p);
+  CUR_PRODUCT=p;
+  el('stock-det-title').textContent=p.name;
+  el('stock-det-body').innerHTML=buildStockForm(p);
+  nav('pg-stock-det');
+}
+
+function buildStockForm(p){
+  const catOpts=STOCK_CATS.map(c=>`<option ${p?.category===c?'selected':''}>${c}</option>`).join('');
+  const icons=['📦','🧴','🧽','🪣','💧','✨','🔧','🪥','🧹','🧺','🫧','🛢️'];
+  const iconBtns=icons.map(i=>`<button type="button" onclick="document.getElementById('icon-pick').value='${i}';document.getElementById('icon-preview').textContent='${i}'" style="font-size:22px;background:none;border:none;cursor:pointer;padding:4px">${i}</button>`).join('');
+
+  return `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        <div id="icon-preview" style="font-size:40px;width:60px;height:60px;background:var(--bg3);border-radius:12px;display:flex;align-items:center;justify-content:center">${p?.icon||'📦'}</div>
+        <div style="flex:1"><div class="nlbl" style="margin-bottom:6px">Ícone</div><div style="display:flex;flex-wrap:wrap;gap:2px">${iconBtns}</div></div>
+        <input type="hidden" id="icon-pick" value="${p?.icon||'📦'}">
+      </div>
+      <div class="nlbl" style="margin-bottom:4px">Nome do Produto *</div>
+      <input id="sp-name" class="input-field" placeholder="Ex: Cera Carnaúba" value="${p?.name||''}">
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div class="nlbl" style="margin-bottom:4px">Marca</div>
+          <input id="sp-brand" class="input-field" placeholder="Ex: Meguiar's" value="${p?.brand||''}"></div>
+        <div><div class="nlbl" style="margin-bottom:4px">Categoria</div>
+          <select id="sp-cat" class="input-field">${catOpts}</select></div>
+        <div><div class="nlbl" style="margin-bottom:4px">Unidade</div>
+          <select id="sp-unit" class="input-field">
+            ${['un','L','ml','kg','g','m','cx'].map(u=>`<option ${p?.unit===u?'selected':''}>${u}</option>`).join('')}
+          </select></div>
+        <div><div class="nlbl" style="margin-bottom:4px">Preço unitário (R$)</div>
+          <input id="sp-price" class="input-field" type="number" min="0" step="0.01" placeholder="0,00" value="${p?.unit_price||''}"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="sh" style="padding:0 0 10px;font-size:12px">Quantidades</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div class="nlbl" style="margin-bottom:4px">Estoque Atual *</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="adjQty('sp-qty',-1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">−</button>
+            <input id="sp-qty" class="input-field" type="number" min="0" step="1" value="${p?.quantity??0}" style="text-align:center;font-size:20px;font-weight:700">
+            <button onclick="adjQty('sp-qty',1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">+</button>
+          </div>
+        </div>
+        <div><div class="nlbl" style="margin-bottom:4px">Estoque Mínimo *</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="adjQty('sp-min',-1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">−</button>
+            <input id="sp-min" class="input-field" type="number" min="0" step="1" value="${p?.min_quantity??1}" style="text-align:center;font-size:20px;font-weight:700">
+            <button onclick="adjQty('sp-min',1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">+</button>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px"><div class="nlbl" style="margin-bottom:4px">Observações</div>
+        <textarea id="sp-notes" class="input-field" rows="2" placeholder="Fornecedor, local de armazenamento…" style="resize:none">${p?.notes||''}</textarea>
+      </div>
+    </div>
+    ${p?`
+    <div class="card" style="margin-bottom:12px;background:var(--bg3)">
+      <div class="sh" style="padding:0 0 10px;font-size:12px">Ajuste Rápido de Quantidade</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-o" onclick="quickAdj(-5)">−5</button>
+        <button class="btn btn-o" onclick="quickAdj(-1)">−1</button>
+        <button class="btn btn-o" onclick="quickAdj(1)">+1</button>
+        <button class="btn btn-o" onclick="quickAdj(5)">+5</button>
+        <button class="btn btn-o" onclick="quickAdj(10)">+10</button>
+      </div>
+    </div>`:''}
+    <button class="btn btn-w" style="margin-bottom:10px" onclick="saveProduct()">&#128190; Salvar Produto</button>
+    <div style="height:8px"></div>`;
+}
+
+function adjQty(id, delta){
+  const inp=el(id);
+  if(!inp)return;
+  const v=Math.max(0,(parseInt(inp.value)||0)+delta);
+  inp.value=v;
+}
+
+async function quickAdj(delta){
+  if(!CUR_PRODUCT){return;}
+  const newQty=Math.max(0,(CUR_PRODUCT.quantity||0)+delta);
+  const{data,error}=await supa.from('stock').update({quantity:newQty,updated_at:now()}).eq('id',CUR_PRODUCT.id).select().single();
+  if(error){toast('Erro ao ajustar','err');return;}
+  CUR_PRODUCT=data;
+  toast(`Estoque: ${newQty} ${data.unit||'un'}`);
+  const inp=el('sp-qty');
+  if(inp)inp.value=newQty;
+  ALL_PRODUCTS=ALL_PRODUCTS.map(p=>p.id===data.id?data:p);
+}
+
+async function saveProduct(){
+  const name=(el('sp-name')?.value||'').trim();
+  if(!name){toast('Informe o nome do produto','err');return;}
+  const qty=parseInt(el('sp-qty')?.value||0);
+  const min=parseInt(el('sp-min')?.value||1);
+  const payload={
+    name,
+    icon:el('icon-pick')?.value||'📦',
+    brand:(el('sp-brand')?.value||'').trim()||null,
+    category:el('sp-cat')?.value||'Outros',
+    unit:el('sp-unit')?.value||'un',
+    unit_price:parseFloat(el('sp-price')?.value)||null,
+    quantity:isNaN(qty)?0:qty,
+    min_quantity:isNaN(min)?1:min,
+    notes:(el('sp-notes')?.value||'').trim()||null,
+    updated_at:now()
+  };
+
+  let data,error;
+  if(CUR_PRODUCT){
+    ({data,error}=await supa.from('stock').update(payload).eq('id',CUR_PRODUCT.id).select().single());
+  } else {
+    ({data,error}=await supa.from('stock').insert(payload).select().single());
+  }
+  if(error){toast('Erro ao salvar: '+error.message,'err');return;}
+  toast(CUR_PRODUCT?'Produto atualizado!':'Produto adicionado!');
+  CUR_PRODUCT=data;
+  ALL_PRODUCTS=CUR_PRODUCT
+    ? ALL_PRODUCTS.map(p=>p.id===data.id?data:p)
+    : [...ALL_PRODUCTS,data];
+  back();
+}
+
+async function deleteProduct(){
+  if(!CUR_PRODUCT)return;
+  const ok=await cfm('Excluir produto?',`"${CUR_PRODUCT.name}" será removido do estoque.`,'Excluir','btn-danger');
+  if(!ok)return;
+  const{error}=await supa.from('stock').delete().eq('id',CUR_PRODUCT.id);
+  if(error){toast('Erro ao excluir','err');return;}
+  toast('Produto removido');
+  ALL_PRODUCTS=ALL_PRODUCTS.filter(p=>p.id!==CUR_PRODUCT.id);
+  CUR_PRODUCT=null;
+  back();
+}
+
+function openStockReport(){
+  if(!ALL_PRODUCTS.length){toast('Estoque vazio','err');return;}
+  const gerado=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const low=ALL_PRODUCTS.filter(p=>p.quantity<=p.min_quantity);
+  const ok=ALL_PRODUCTS.filter(p=>p.quantity>p.min_quantity);
+  const totalVal=ALL_PRODUCTS.reduce((t,p)=>t+(p.unit_price||0)*(p.quantity||0),0);
+
+  const row=p=>{
+    const low2=p.quantity<=p.min_quantity;
+    const sc=p.quantity===0?'#e51d1d':low2?'#f59e0b':'#22c55e';
+    const label=p.quantity===0?'ZERADO':low2?'BAIXO':'OK';
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee">${p.icon||'📦'} ${p.name}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;color:#666">${p.brand||'–'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;color:#666">${p.category||'–'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center;font-weight:700;font-size:16px">${p.quantity} <span style="font-size:11px;font-weight:400;color:#888">${p.unit||'un'}</span></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center;color:#888">${p.min_quantity} ${p.unit||'un'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center"><span style="background:${sc}22;color:${sc};border:1px solid ${sc}55;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700">${label}</span></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700;color:#e51d1d">${p.unit_price?fmtMoney((p.unit_price||0)*(p.quantity||0)):'–'}</td>
+    </tr>`;
+  };
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Relatório de Estoque — Tapa na Lata</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .header{background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+    .brand{font-size:22px;font-weight:900;letter-spacing:2px;opacity:.85;margin-bottom:4px}
+    .title{font-size:26px;font-weight:900}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+    .stat{background:#fff;border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .stat-val{font-size:28px;font-weight:900;line-height:1;margin-bottom:3px}
+    .stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}
+    .table-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#e51d1d}
+    thead th{padding:11px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#fff}
+    .section-title{padding:14px 16px 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;background:#fff}
+    .footer{text-align:center;font-size:11px;color:#aaa;margin-top:8px}
+    @media print{body{background:#fff}.wrap{padding:0}@page{margin:14mm}}
+  </style></head><body>
+  <div class="wrap">
+    <div class="header">
+      <div><div class="brand">TAPA NA LATA</div><div class="title">Relatório de Estoque</div></div>
+      <div style="text-align:right;font-size:13px;opacity:.9;line-height:1.8">
+        <div>Gerado em ${gerado}</div>
+        <div>${ALL_PRODUCTS.length} produtos cadastrados</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${ALL_PRODUCTS.length}</div><div class="stat-lbl">Total Produtos</div></div>
+      <div class="stat"><div class="stat-val" style="color:#22c55e">${ok.length}</div><div class="stat-lbl">Estoque OK</div></div>
+      <div class="stat"><div class="stat-val" style="color:#f59e0b">${low.filter(p=>p.quantity>0).length}</div><div class="stat-lbl">Estoque Baixo</div></div>
+      <div class="stat"><div class="stat-val" style="color:#e51d1d">${ALL_PRODUCTS.filter(p=>p.quantity===0).length}</div><div class="stat-lbl">Zerados</div></div>
+    </div>
+    ${totalVal>0?`<div style="background:#fff;border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+      <span style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:1px">Valor Total em Estoque</span>
+      <span style="font-size:28px;font-weight:900;color:#e51d1d">${fmtMoney(totalVal)}</span>
+    </div>`:''}
+    ${low.length?`
+    <div class="table-wrap" style="margin-bottom:20px">
+      <div class="section-title" style="background:#fff2f2;color:#e51d1d">⚠️ Produtos com Estoque Baixo ou Zerado</div>
+      <table><thead><tr><th>Produto</th><th>Marca</th><th>Categoria</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Qtd Mínima</th><th style="text-align:center">Status</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${low.map(row).join('')}</tbody></table>
+    </div>`:''}
+    <div class="table-wrap">
+      <div class="section-title">Todos os Produtos</div>
+      <table><thead><tr><th>Produto</th><th>Marca</th><th>Categoria</th><th style="text-align:center">Qtd Atual</th><th style="text-align:center">Qtd Mínima</th><th style="text-align:center">Status</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${ALL_PRODUCTS.map(row).join('')}</tbody></table>
+    </div>
+    <div class="footer">Tapa na Lata · Alameda Dr. José Cardeal, 241 — Jardim Pedroso, Indaiatuba-SP</div>
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  if(!w){toast('Permita pop-ups para exportar','err',4000);return;}
+  w.document.write(html);
+  w.document.close();
+  toast('Relatório gerado! Salve como PDF 🖨️','ok',4000);
 }
 
 // ── HISTÓRICO DE CLIENTES ──
