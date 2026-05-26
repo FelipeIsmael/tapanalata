@@ -279,6 +279,16 @@ input,select,textarea,button{font-family:inherit}
       <button class="btn btn-r btn-w" id="btn-reset" onclick="doReset()">Enviar Link</button>
       <p style="text-align:center;margin-top:12px;font-size:12px"><a onclick="authTab('login')" style="color:var(--muted);cursor:pointer">&#8592; Voltar</a></p>
     </div>
+    <div id="f-newpass" class="hidden">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:36px">🔐</div>
+        <div style="font-weight:700;font-size:17px;margin-top:6px">Criar nova senha</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5">Escolha uma senha segura com pelo menos 6 caracteres.</div>
+      </div>
+      <div class="fld"><label>Nova Senha</label><input type="password" id="np-pw" placeholder="mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="fld"><label>Confirmar Senha</label><input type="password" id="np-cf" placeholder="repita a senha" autocomplete="new-password"></div>
+      <button class="btn btn-r btn-w" id="btn-newpass" onclick="doNewPass()">Salvar Nova Senha</button>
+    </div>
     <div id="f-adm" class="hidden">
       <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;background:rgba(229,29,29,.07);border:1px solid var(--border-r);border-radius:10px;margin-bottom:14px">
         <span style="font-size:22px">&#128295;</span>
@@ -343,6 +353,10 @@ input,select,textarea,button{font-family:inherit}
 <!-- SERVICES -->
 <div class="page gone" id="pg-svcs">
   <div class="hdr"><button class="hdr-back" onclick="back()">&#8249;</button><div class="hdr-title">Nossos Serviços</div></div>
+  <div style="margin:10px 16px 0;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px;flex-shrink:0">⚠️</span>
+    <span style="font-size:12px;color:var(--yellow);font-weight:600;line-height:1.5">Os valores exibidos são <u>a partir de</u> e podem variar conforme o tamanho e estado do veículo. O valor final será confirmado no atendimento.</span>
+  </div>
   <div class="scroll pad" id="svcs-list" style="padding-top:12px"></div>
 </div>
 
@@ -454,7 +468,7 @@ input,select,textarea,button{font-family:inherit}
 
 <!-- ADMIN SERVICES -->
 <div class="page gone" id="pg-adm-svcs">
-  <div class="hdr"><button class="hdr-back" onclick="back()">&#8249;</button><div class="hdr-title">Serviços e Adicionais</div></div>
+  <div class="hdr"><button class="hdr-back" onclick="back()">&#8249;</button><div class="hdr-title">Serviços e Adicionais</div><button class="hdr-act" onclick="printSvcsReport()" title="Imprimir">&#128196;</button></div>
   <div class="scroll">
     <div class="sh" style="padding-left:16px;padding-right:16px">Serviços <a onclick="openSheet('svc')">+ Novo</a></div>
     <div class="card" style="margin:0 16px;padding:0"><div id="adm-svcs-rows"></div></div>
@@ -656,7 +670,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 });
 function authTab(t){
-  ['login','reg','reset','adm'].forEach(x=>{
+  ['login','reg','reset','adm','newpass'].forEach(x=>{
     el('at-'+x)?.classList.toggle('on',x===t);
     el('f-'+x)?.classList.toggle('hidden',x!==t);
   });
@@ -691,6 +705,20 @@ async function doReset(){
   setLoading('btn-reset',false,'Enviar Link');
   if(error){toast('Erro: '+error.message,'err');return;}
   toast('Link enviado! Verifique seu e-mail.','ok',5000);authTab('login');
+}
+async function doNewPass(){
+  const pw=(el('np-pw')?.value||'').trim();
+  const cf=(el('np-cf')?.value||'').trim();
+  if(!pw||!cf){toast('Preencha os dois campos','err');return;}
+  if(pw!==cf){toast('Senhas não conferem','err');return;}
+  if(pw.length<6){toast('Senha mínima: 6 caracteres','err');return;}
+  setLoading('btn-newpass',true,'Salvando…');
+  const{error}=await supa.auth.updateUser({password:pw});
+  setLoading('btn-newpass',false,'Salvar Nova Senha');
+  if(error){toast('Erro: '+error.message,'err');return;}
+  toast('Senha atualizada com sucesso! Faça login.','ok',4000);
+  await supa.auth.signOut();
+  authTab('login');
 }
 async function doAdminLogin(){
   const email=el('a-em').value.trim().toLowerCase(),pass=el('a-pw').value;
@@ -906,7 +934,7 @@ function renderSvcs(){
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
         <div style="font-size:36px">${s.icon}</div>
         <div style="flex:1"><div style="font-size:17px;font-weight:700">${s.name}</div>${s.duration?`<span class="dur-badge" style="margin-top:4px">⏱ ${fmtDur(s.duration)}</span>`:''}</div>
-        <div style="text-align:right"><div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--red)">${fmtMoney(s.price)}</div><div style="font-size:10px;color:var(--muted)">a partir de</div></div>
+        <div style="text-align:right"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--yellow);margin-bottom:2px">a partir de</div><div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--red);line-height:1">${fmtMoney(s.price)}</div></div>
       </div>
       <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px">${s.description||''}</div>
       <button class="btn btn-r btn-w btn-s" onclick="tabGo('new')">Agendar</button>
@@ -920,7 +948,7 @@ function renderNew(){
     <div class="svc-item" id="si-${s.id}" onclick="toggleSvc('${s.id}')">
       <div class="svc-ck" id="sc-${s.id}">✓</div>
       <div class="svc-body"><h4>${s.icon} ${s.name}</h4><p>${s.description||''}</p>
-        <div class="svc-meta"><div class="svc-price">${fmtMoney(s.price)}</div>${s.duration?`<span class="dur-badge">⏱ ${fmtDur(s.duration)}</span>`:''}</div>
+        <div class="svc-meta"><div><div style="font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--yellow);text-transform:uppercase">a partir de</div><div class="svc-price">${fmtMoney(s.price)}</div></div>${s.duration?`<span class="dur-badge">⏱ ${fmtDur(s.duration)}</span>`:''}</div>
       </div></div>`).join('');
   el('new-adns').innerHTML=ADN_CACHE.filter(a=>a.active).map(a=>`
     <div class="adn-chip" id="ac-${a.id}" onclick="toggleAdn('${a.id}')">
@@ -954,9 +982,10 @@ function updateSum(){
   const tot=ss.reduce((t,s)=>t+s.price,0)+sa.reduce((t,a)=>t+a.price,0);
   const dur=ss.reduce((t,s)=>t+(s.duration||0),0)+sa.reduce((t,a)=>t+(a.duration||0),0);
   e.innerHTML=`<div class="summary">
-    ${ss.map(s=>`<div class="sum-row"><span>${s.icon} ${s.name}</span><div style="display:flex;gap:10px;align-items:center">${s.duration?`<span class="dur-badge">⏱${fmtDur(s.duration)}</span>`:''}<span>${fmtMoney(s.price)}</span></div></div>`).join('')}
+    ${ss.map(s=>`<div class="sum-row"><span>${s.icon} ${s.name}</span><div style="display:flex;gap:10px;align-items:center">${s.duration?`<span class="dur-badge">⏱${fmtDur(s.duration)}</span>`:''}<span style="font-size:11px;color:var(--yellow);font-weight:600">a partir de</span><span>${fmtMoney(s.price)}</span></div></div>`).join('')}
     ${sa.map(a=>`<div class="sum-row" style="color:var(--muted)"><span>${a.icon} ${a.name}</span><div style="display:flex;gap:10px;align-items:center">${a.duration?`<span class="dur-badge">⏱${fmtDur(a.duration)}</span>`:''}<span>+${fmtMoney(a.price)}</span></div></div>`).join('')}
-    <div class="sum-row"><span style="display:flex;align-items:center;gap:8px">Total ${dur?`<span class="dur-badge">⏱${fmtDur(dur)}</span>`:''}</span><span class="sum-tot">${fmtMoney(tot)}</span></div>
+    <div class="sum-row"><span style="display:flex;align-items:center;gap:8px">Total Estimado ${dur?`<span class="dur-badge">⏱${fmtDur(dur)}</span>`:''}</span><span class="sum-tot">${fmtMoney(tot)}</span></div>
+    <div style="font-size:11px;color:var(--yellow);font-weight:600;text-align:center;padding:6px 0 2px">⚠️ Valor estimado — preço final conforme avaliação do veículo</div>
   </div>`;
 }
 async function confirmBooking(){
@@ -1358,6 +1387,117 @@ async function downloadDailyReport(){
   toast('Relatório gerado! Use Imprimir → Salvar como PDF 🖨️','ok',5000);
 }
 
+function printSvcsReport(){
+  if(!SVC_CACHE.length&&!ADN_CACHE.length){toast('Nenhum serviço cadastrado','err');return;}
+  const gerado=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const svcRows=SVC_CACHE.map((s,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f9fb'}">
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;font-size:22px;text-align:center">${s.icon}</td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee">
+      <div style="font-weight:700;font-size:14px">${s.name}</div>
+      ${s.description?`<div style="font-size:12px;color:#888;margin-top:2px">${s.description}</div>`:''}
+    </td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:13px">${s.duration?fmtDur(s.duration):'–'}</td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:15px;color:#e51d1d">${fmtMoney(s.price)}</td>
+  </tr>`).join('');
+
+  const adnRows=ADN_CACHE.map((a,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f9fb'}">
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;font-size:22px;text-align:center">${a.icon}</td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee">
+      <div style="font-weight:700;font-size:14px">${a.name}</div>
+      ${a.description?`<div style="font-size:12px;color:#888;margin-top:2px">${a.description}</div>`:''}
+    </td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:13px">${a.duration?fmtDur(a.duration):'–'}</td>
+    <td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:15px;color:#e51d1d">+${fmtMoney(a.price)}</td>
+  </tr>`).join('');
+
+  const totalSvc=SVC_CACHE.reduce((t,s)=>t+s.price,0);
+  const totalAdn=ADN_CACHE.reduce((t,a)=>t+a.price,0);
+  const durMin=SVC_CACHE.reduce((t,s)=>t+(s.duration||0),0);
+  const durMax=durMin+ADN_CACHE.reduce((t,a)=>t+(a.duration||0),0);
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Cardápio de Serviços — Tapa na Lata</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:820px;margin:0 auto;padding:24px}
+    .header{background:linear-gradient(135deg,#e51d1d,#b01010);color:#fff;border-radius:16px;padding:28px 32px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+    .brand{font-size:14px;font-weight:700;letter-spacing:2px;opacity:.75;margin-bottom:4px}
+    .title{font-size:28px;font-weight:900}
+    .subtitle{font-size:13px;opacity:.8;margin-top:4px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+    .stat{background:#fff;border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .stat-val{font-size:26px;font-weight:900;line-height:1;margin-bottom:3px}
+    .stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}
+    .section{margin-bottom:20px}
+    .section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#888;margin-bottom:8px;padding-left:2px}
+    .table-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#e51d1d}
+    thead th{padding:11px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#fff}
+    thead th:last-child{text-align:right}
+    .footer{text-align:center;font-size:11px;color:#aaa;margin-top:12px;line-height:1.8}
+    @media print{body{background:#fff}.wrap{padding:0}@page{margin:14mm}}
+  </style></head><body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="brand">TAPA NA LATA · ESTÉTICA AUTOMOTIVA</div>
+        <div class="title">Cardápio de Serviços</div>
+        <div class="subtitle">Alameda Dr. José Cardeal, 241 — Indaiatuba-SP</div>
+      </div>
+      <div style="text-align:right;font-size:13px;opacity:.85;line-height:1.9">
+        <div>Gerado em ${gerado}</div>
+        <div>${SVC_CACHE.length} serviços · ${ADN_CACHE.length} adicionais</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-val">${SVC_CACHE.length}</div><div class="stat-lbl">Serviços</div></div>
+      <div class="stat"><div class="stat-val">${ADN_CACHE.length}</div><div class="stat-lbl">Adicionais</div></div>
+      <div class="stat"><div class="stat-val" style="color:#e51d1d;font-size:18px">${fmtMoney(totalSvc)}</div><div class="stat-lbl">Ticket Médio</div></div>
+      <div class="stat"><div class="stat-val" style="font-size:18px;color:#818cf8">${durMin?fmtDur(durMin):'–'}</div><div class="stat-lbl">Tempo Base</div></div>
+    </div>
+
+    ${SVC_CACHE.length?`
+    <div class="section">
+      <div class="section-hdr">&#9881; Serviços</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:48px;text-align:center"></th><th>Serviço</th><th style="text-align:center">Duração</th><th style="text-align:right">Preço</th></tr></thead>
+          <tbody>${svcRows}</tbody>
+        </table>
+      </div>
+    </div>`:''}
+
+    ${ADN_CACHE.length?`
+    <div class="section">
+      <div class="section-hdr">&#10133; Adicionais</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:48px;text-align:center"></th><th>Adicional</th><th style="text-align:center">Duração</th><th style="text-align:right">Preço</th></tr></thead>
+          <tbody>${adnRows}</tbody>
+        </table>
+      </div>
+    </div>`:''}
+
+    <div class="footer">
+      Tapa na Lata · Estética Automotiva<br>
+      Alameda Dr. José Cardeal, 241 — Jardim Pedroso, Indaiatuba-SP, 13343-100<br>
+      Preços sujeitos a alteração sem aviso prévio
+    </div>
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  if(!w){toast('Permita pop-ups para imprimir','err',4000);return;}
+  w.document.write(html);
+  w.document.close();
+  toast('Cardápio gerado! Salve como PDF 🖨️','ok',4000);
+}
+
 // ── ESTOQUE ──
 let ALL_PRODUCTS=[], STOCK_FILTER='all', CUR_PRODUCT=null;
 
@@ -1490,20 +1630,18 @@ function buildStockForm(p){
     </div>
     <div class="card" style="margin-bottom:12px">
       <div class="sh" style="padding:0 0 10px;font-size:12px">Quantidades</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div><div class="nlbl" style="margin-bottom:4px">Estoque Atual *</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button onclick="adjQty('sp-qty',-1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">−</button>
-            <input id="sp-qty" class="input-field" type="number" min="0" step="1" value="${p?.quantity??0}" style="text-align:center;font-size:20px;font-weight:700">
-            <button onclick="adjQty('sp-qty',1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">+</button>
-          </div>
+      <div>
+        <div class="nlbl" style="margin-bottom:4px">Estoque Atual *</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <button onclick="adjQty('sp-qty',-1)" class="btn btn-o" style="padding:10px 20px;font-size:22px;line-height:1;flex-shrink:0">−</button>
+          <input id="sp-qty" class="input-field" type="number" min="0" step="1" value="${p?.quantity??0}" style="text-align:center;font-size:26px;font-weight:700;flex:1">
+          <button onclick="adjQty('sp-qty',1)" class="btn btn-o" style="padding:10px 20px;font-size:22px;line-height:1;flex-shrink:0">+</button>
         </div>
-        <div><div class="nlbl" style="margin-bottom:4px">Estoque Mínimo *</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button onclick="adjQty('sp-min',-1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">−</button>
-            <input id="sp-min" class="input-field" type="number" min="0" step="1" value="${p?.min_quantity??1}" style="text-align:center;font-size:20px;font-weight:700">
-            <button onclick="adjQty('sp-min',1)" class="btn btn-o" style="padding:8px 14px;font-size:18px;line-height:1">+</button>
-          </div>
+        <div class="nlbl" style="margin-bottom:4px">Estoque Mínimo *</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button onclick="adjQty('sp-min',-1)" class="btn btn-o" style="padding:10px 20px;font-size:22px;line-height:1;flex-shrink:0">−</button>
+          <input id="sp-min" class="input-field" type="number" min="0" step="1" value="${p?.min_quantity??1}" style="text-align:center;font-size:26px;font-weight:700;flex:1">
+          <button onclick="adjQty('sp-min',1)" class="btn btn-o" style="padding:10px 20px;font-size:22px;line-height:1;flex-shrink:0">+</button>
         </div>
       </div>
       <div style="margin-top:10px"><div class="nlbl" style="margin-bottom:4px">Observações</div>
@@ -1995,7 +2133,22 @@ async function init(){
       </div></div>`;
     return;
   }
-  if(window.location.hash.includes('type=recovery')){showPage('pg-auth');authTab('login');toast('Defina sua nova senha','ok',4000);return;}
+  // Escuta evento de recovery do Supabase (link do e-mail)
+  supa.auth.onAuthStateChange(async(event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      showPage('pg-auth');
+      authTab('newpass');
+      el('tabbar')?.classList.add('hidden');
+      toast('Digite sua nova senha abaixo 🔐','ok',4000);
+    }
+  });
+  // Fallback: hash antigo (Supabase PKCE às vezes ainda usa)
+  if(window.location.hash.includes('type=recovery')){
+    showPage('pg-auth');authTab('newpass');
+    el('tabbar')?.classList.add('hidden');
+    toast('Digite sua nova senha abaixo 🔐','ok',4000);
+    return;
+  }
   const{data:{session}}=await supa.auth.getSession();
   if(session?.user){await loadUserProfile(session.user);return;}
   showPage('pg-auth');authTab('login');
